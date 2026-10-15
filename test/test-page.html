@@ -265,8 +265,8 @@
           </tr>
           <tr>
             <td>重复图片</td>
-            <td>photo-dup.png 出现两次；photo-a_400x400.png 与 photo-a.png</td>
-            <td>只保留 1 条，且缩略图被还原成 photo-a.png</td>
+            <td>photo-dup.png 出现两次；photo-dup.png?spm=…&amp;t=… 一次；photo-a_400x400.png 与 photo-a.png</td>
+            <td>只保留 1 条（埋点参数与尺寸后缀都不算不同的图），且缩略图被还原成 photo-a.png</td>
           </tr>
           <tr>
             <td>小尺寸 / 占位</td>
@@ -396,6 +396,15 @@
         <figure>
           <img src="images/photo-a_400x400.png" alt="photo-a 的缩略图版本" />
           <figcaption>photo-a_400x400.png（预期还原并合并进 photo-a.png）</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="images/photo-dup.png?spm=a1z10.3-b.w4011-1234.56&amp;t=1699999999"
+            alt="带埋点参数的重复图"
+          />
+          <figcaption>
+            photo-dup.png?spm=…&amp;t=…（模拟淘宝给图片挂埋点，预期与 photo-dup.png 合并成一条）
+          </figcaption>
         </figure>
       </div>
 

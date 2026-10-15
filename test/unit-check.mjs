@@ -203,6 +203,49 @@ notEq(
   urlUtils.makeDedupeKey('http://127.0.0.1:8001/images/photo-b.png')
 );
 
+// 淘宝/天猫会给图片挂埋点与缓存刷新参数，同一张图必须归并成一条——
+// 否则结果页里就会出现「一批图片反复出现多次」。这里把每种写法都钉住。
+const dupBase = 'https://img.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg';
+const dupBaseKey = urlUtils.makeDedupeKey(urlUtils.restoreOriginalUrl(dupBase, aliRules));
+const dupVariants = [
+  ['尺寸后缀', 'https://img.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg_400x400.jpg'],
+  ['webp 变体', 'https://img.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg_.webp'],
+  ['spm 埋点', 'https://img.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg?spm=a1z10.3-b.w4011-1234.56'],
+  ['多个埋点并存', 'https://img.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg?spm=a1z10.3-b.w4011-1234.56&ali_trackid=2:mm_123'],
+  ['缓存刷新 t 参数', 'https://img.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg?t=1699999999'],
+  ['缓存刷新 _ 参数', 'https://img.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg?_=1699999999'],
+  ['utm 埋点', 'https://img.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg?utm_source=detail'],
+  ['换子域 gw', 'https://gw.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg'],
+  ['换子域 cbu01', 'https://cbu01.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg'],
+  ['换协议 http', 'http://img.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg'],
+  ['后缀 + 埋点叠加', 'https://img.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg_50x50xz.jpg?spm=a1z10.3-b.w4011-1234.56']
+];
+for (const [label, variant] of dupVariants) {
+  eq(`淘宝重复写法归并（${label}）`, urlUtils.makeDedupeKey(urlUtils.restoreOriginalUrl(variant, aliRules)), dupBaseKey);
+}
+
+// 反向：真的不同的图绝不能被合并。归一化只针对已知 CDN 与已知埋点参数。
+notEq(
+  '不同文件名不归并',
+  urlUtils.makeDedupeKey('https://img.alicdn.com/imgextra/i1/1234567/O1CN01abcXYZ.jpg'),
+  urlUtils.makeDedupeKey('https://img.alicdn.com/imgextra/i1/1234567/O1CN01abcZZZ.jpg')
+);
+notEq(
+  '不同商品目录不归并',
+  urlUtils.makeDedupeKey('https://img.alicdn.com/imgextra/i1/1234567/x.jpg'),
+  urlUtils.makeDedupeKey('https://img.alicdn.com/imgextra/i1/7654321/x.jpg')
+);
+notEq(
+  '未知参数仍参与区分（不做激进合并）',
+  urlUtils.makeDedupeKey('https://img.alicdn.com/a/b.jpg?variant=1'),
+  urlUtils.makeDedupeKey('https://img.alicdn.com/a/b.jpg?variant=2')
+);
+notEq(
+  '非已知 CDN 不跨域归并',
+  urlUtils.makeDedupeKey('https://img.example.com/a/b.jpg'),
+  urlUtils.makeDedupeKey('https://cdn.example.com/a/b.jpg')
+);
+
 /* ──────────────────── 5. 扩展名 / 文件名 / 路径安全 ──────────────────── */
 
 group('扩展名与文件名');

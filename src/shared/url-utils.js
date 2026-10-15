@@ -51,6 +51,58 @@ export const PDD_QUERY_BLOCKLIST = [
   /image_process/i
 ];
 
+/**
+ * 与图片内容**无关**的查询参数：淘宝/天猫的埋点（spm、ali_trackid）、
+ * 各种缓存刷新参数（t、_、timestamp）、常见 UTM 埋点。
+ *
+ * 这些参数不影响返回哪一张图，但会进入去重键。淘宝给图片挂 `?spm=…` 是常态，
+ * 如果不在这里丢掉，同一张商品图会因为埋点不同而被当成好几张，结果页就会重复。
+ */
+export const TRACKING_QUERY_RE = [
+  /^spm(?:[_-].*)?$/i,
+  /^ali_trackid$/i,
+  /^ali_refid$/i,
+  /^ali_redirect$/i,
+  /^scm$/i,
+  /^abbucket$/i,
+  /^from$/i,
+  /^source$/i,
+  /^t$/i,
+  /^ts$/i,
+  /^_$/i,
+  /^timestamp$/i,
+  /^utms?_.+$/i,
+  /^wh_(?:source|cmPID|refpid|pvid|bts)$/i,
+  /^bx_/i,
+  /^cvid$/i
+];
+
+/**
+ * 同一张图经常由同一 CDN 的**不同子域**返回（img. / gw. / cbu01. / gju…）。
+ * 这些 CDN 的资源路径本身就能唯一确定一张图，所以去重键里把子域与协议一并归一，
+ * 否则同一张图会因为「img.alicdn.com」和「gw.alicdn.com」被算成两张。
+ *
+ * 只归一「已知图片 CDN」，不做通用的跨域合并——不同站点上的同名路径
+ * 完全可能是两张不同的图（例如 localhost 与 127.0.0.1）。
+ */
+export const CDN_ORIGIN_ALIASES = [
+  [/^(?:[\w-]+\.)*alicdn\.com$/i, 'cdn:alicdn.com'],
+  [/^(?:[\w-]+\.)*taobaocdn\.com$/i, 'cdn:taobaocdn.com'],
+  [/^(?:[\w-]+\.)*tbcdn\.cn$/i, 'cdn:tbcdn.cn'],
+  [/^(?:[\w-]+\.)*360buyimg\.com$/i, 'cdn:360buyimg.com'],
+  [/^(?:[\w-]+\.)*pddpic\.com$/i, 'cdn:pddpic.com']
+];
+
+/** 把已知图片 CDN 的主机名归一到统一写法（同时抹掉 http/https 差异）；其它主机原样返回。 */
+function canonicalOrigin(origin) {
+  const separator = origin.indexOf('://');
+  const host = separator >= 0 ? origin.slice(separator + 3) : origin;
+  for (const [pattern, canonical] of CDN_ORIGIN_ALIASES) {
+    if (pattern.test(host)) return canonical;
+  }
+  return origin;
+}
+
 /** 按平台给出的原图还原规则。平台改版时只需要动这里。 */
 export const ORIGINAL_RULES = Object.freeze({
   taobao: { suffixPatterns: ALI_RESIZE_SUFFIX_PATTERNS },
@@ -124,15 +176,46 @@ export function restoreOriginalUrl(url, rules, { maxRounds = 3 } = {}) {
 }
 
 /** 生成去重键：忽略缩放参数、hash 与大小写差异。 */
+/**
+ * 丢掉「与图片内容无关」的查询参数（埋点、缓存刷新）。
+ *
+ * 与 filterQueryParams 的区别：这里**只看参数名**，不看参数值。
+ * 埋点参数的特征在名字上（`spm`、`t`、`_`），值里是随机的追踪串，
+ * 拿整个 `键=值` 去匹配锚定正则会永远匹配不上。
+ */
+function stripTrackingParams(tail) {
+  if (!tail) return tail;
+  const hashIndex = tail.indexOf('#');
+  const hash = hashIndex >= 0 ? tail.slice(hashIndex) : '';
+  const beforeHash = hashIndex >= 0 ? tail.slice(0, hashIndex) : tail;
+  if (!beforeHash.startsWith('?')) return tail;
+  const kept = beforeHash
+    .slice(1)
+    .split('&')
+    .filter((pair) => {
+      if (!pair) return false;
+      const name = pair.split('=')[0];
+      return !TRACKING_QUERY_RE.some((re) => re.test(name));
+    });
+  return (kept.length ? `?${kept.join('&')}` : '') + hash;
+}
+
+/**
+ * 生成去重键：忽略缩放参数、埋点/缓存参数、hash、CDN 子域与大小写差异。
+ *
+ * 让哪些 URL 视为「同一张图」完全由这个函数决定，所以它是重复条目的唯一关口。
+ */
 export function makeDedupeKey(url) {
   if (!url) return '';
   if (url.startsWith('data:')) return `data:${url.length}:${url.slice(0, 96)}`;
   const match = /^(https?:\/\/[^/?#]+)([^?#]*)([\s\S]*)$/i.exec(url);
   if (!match) return url;
-  const origin = match[1].toLowerCase();
+  const origin = canonicalOrigin(match[1].toLowerCase());
   const path = (match[2] || '/').replace(/\/{2,}/g, '/').replace(/\/+$/, '') || '/';
   let tail = match[3] || '';
+  // 先丢缩放 / 水印这类真的「改变输出」的转换参数，再丢埋点与缓存刷新参数
   tail = filterQueryParams(tail, PDD_QUERY_BLOCKLIST);
+  tail = stripTrackingParams(tail);
   tail = tail.replace(/#.*$/, '');
   return origin + path + tail;
 }

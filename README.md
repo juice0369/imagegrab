@@ -135,7 +135,7 @@ python -m http.server 8000
 | `srcset` / `picture` | 只保留最大候选 `srcset-large.png`，`srcset-small.png` 不出现 |
 | 懒加载 | `lazy-one.png`、`lazy-two.png` 都在（关闭「扫描前自动滚动」时可能缺失） |
 | 背景图 | `bg-hero.png`（行内 style）与 `bg-tile.png`（CSS 类）都在 |
-| 重复 | `photo-dup.png` 只有 1 条；`photo-a_400x400.png` 不出现，已还原并合并进 `photo-a.png` |
+| 重复 | `photo-dup.png` 只有 1 条（含带 `?spm=…&t=…` 埋点的那个写法）；`photo-a_400x400.png` 不出现，已还原并合并进 `photo-a.png` |
 | 应该被过滤 | `photo-small.png`、`spacer-1x1.png`、`logo-site.png`、`banner-wide.png`、`photo-footer.png`、页眉里的装饰图、内联 SVG 占位图都不出现 |
 | 404 | `missing-on-purpose.png` 在列表里，缩略图显示「无法预览」 |
 | 同源 iframe / Shadow DOM | `frame-image.png`、`shadow-image.png` 都在 |
@@ -193,6 +193,9 @@ node tools/make-assets.mjs
 
 **结果页显示「会话数据已过期」**
 提取结果只存在于当前浏览器会话。浏览器重启、扩展重载、关闭结果页、超过 2 小时都会清理，请回到商品页重新提取。
+
+**结果页里同一张图出现了好几次**
+去重键会忽略尺寸后缀、埋点参数（`spm`、`ali_trackid`、`utm_*`）、缓存刷新参数（`t`、`_`）以及同一图片 CDN 的不同子域（`img.` / `gw.` / `cbu01.`），这几类都算同一张图。真正会被当成两张的是**同一路径挂了你没见过的参数**（例如 `?variant=1` 与 `?variant=2`）——这类参数无法判断是否影响图片内容，所以保守地按不同图处理，避免把两张不同的图合并掉。
 
 **下载出来的图片比网页上看到的小**
 说明该条是从缩略图地址还原的原图，但原图地址已失效，于是回退下载了页面上的实际地址。卡片上的「原格式」标记和尺寸标注会反映最终结果。
