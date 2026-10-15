@@ -324,9 +324,7 @@ function renderSummary() {
     `${session.platformName || '未知站点'} · 共 ${images.length} 张图片` +
     `${session.pageTitle ? ` · ${truncate(session.pageTitle, 40)}` : ''}${created ? ` · ${created}` : ''}` +
     ` · 文件名 ${prefix}_001.png`;
-  els['footer-hint'].textContent = `图片只在本机处理：先转成 PNG 再交给浏览器下载，不上传任何数据。源页面：${
-    session.pageUrl || '（未知）'
-  }`;
+  els['footer-hint'].textContent = session.pageUrl ? `源页面：${session.pageUrl}` : '';
   els['btn-source'].hidden = !session.sourceTabId;
 }
 

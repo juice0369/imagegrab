@@ -2,8 +2,12 @@
  * 结果页的卡片渲染。
  *
  * 性能考虑：图片可能有几百张，所以卡片是「按 rAF 分片」挂载的，
- * 缩略图用 loading="lazy"，尺寸直接读 naturalWidth/naturalHeight——
- * 因为缩略图就是原图地址，浏览器缓存会复用，等于零额外请求。
+ * 尺寸直接读 naturalWidth/naturalHeight——缩略图就是原图地址，浏览器缓存会复用。
+ *
+ * 缩略图刻意不加 loading="lazy"：卡片里的 <img> 在加载完成前没有内在尺寸
+ * （CSS 只给 max-width/max-height），懒加载的可见性判定拿到的是一块 0×0 的区域，
+ * 容易出现「滚动到位了却一直空着」的卡片。既然地址本来就命中缓存，
+ * 就直接让每张缩略图都发一次请求，保证页面上每张图都真的显示出来。
  */
 
 import { ITEM_STATUS, ITEM_STATUS_LABEL, describeError } from '../shared/constants.js';
@@ -75,7 +79,7 @@ export function createGrid({ container: initialContainer = null, onAction }) {
         <span class="pill"></span>
       </div>
       <div class="thumb">
-        <img src="" alt="" loading="lazy" referrerpolicy="no-referrer">
+        <img src="" alt="" decoding="async" referrerpolicy="no-referrer">
         <div class="thumb-note" hidden></div>
       </div>
       <div class="card-body">
