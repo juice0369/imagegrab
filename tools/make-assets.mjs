@@ -157,15 +157,33 @@ function inTriangle(px, py, ax, ay, bx, by, cx, cy) {
   return !(hasNegative && hasPositive);
 }
 
-const GOLD = [255, 214, 102];
 const WHITE = [255, 255, 255];
+
+/* ───────────────────────── 图标配色 ───────────────────────── */
+
+/**
+ * 品牌暖色：与官网（docs/assets/site.css）共用同一套色值，
+ * 扩展工具栏图标与官网 logo 保持一致，整体不出现蓝紫色。
+ *   底：深赤陶 #9a3412 → 琥珀 #d97706
+ *   相框：米白 #fffbf4（外圈纯白高光）
+ *   太阳：琥珀 #e08a1e
+ *   远山：浅陶土色；近山：深赤陶
+ */
+const BRAND = {
+  base: [154, 52, 18], // #9a3412
+  accent: [217, 119, 6], // #d97706
+  frame: [255, 251, 244], // #fffbf4
+  sun: [224, 138, 30], // #e08a1e
+  hillFar: [232, 201, 163], // #e8c9a3
+  hillNear: [154, 52, 18] // #9a3412
+};
 
 /* ───────────────────────── 图标 ───────────────────────── */
 
 function iconLayers(size) {
   const radius = size * 0.24;
-  const base = hslToRgb(228, 0.78, 0.55);
-  const accent = hslToRgb(268, 0.7, 0.5);
+  const base = BRAND.base;
+  const accent = BRAND.accent;
 
   const frameMargin = size * 0.21;
   const frameWidth = size - frameMargin * 2;
@@ -182,7 +200,7 @@ function iconLayers(size) {
   const mountainTopB = mountainBase - frameHeight * 0.36;
 
   return [
-    // 底：圆角方形渐变
+    // 底：圆角方形渐变（深赤陶 → 琥珀）
     (px, py) => {
       if (!inRoundRect(px, py, 0, 0, size, size, radius)) return null;
       const t = Math.min(1, Math.max(0, (px / size) * 0.55 + (py / size) * 0.45));
@@ -193,19 +211,20 @@ function iconLayers(size) {
         1
       ];
     },
-    // 白色相框（浅色底）
-    (px, py) => (inRoundRect(px, py, frameMargin, frameY, frameWidth, frameHeight, frameRadius) ? [238, 242, 255, 1] : null),
+    // 米白相框
+    (px, py) =>
+      inRoundRect(px, py, frameMargin, frameY, frameWidth, frameHeight, frameRadius) ? [...BRAND.frame, 1] : null,
     // 太阳
-    (px, py) => (inCircle(px, py, sunX, sunY, sunRadius) ? GOLD : null),
+    (px, py) => (inCircle(px, py, sunX, sunY, sunRadius) ? [...BRAND.sun, 1] : null),
     // 远山
     (px, py) =>
       inTriangle(px, py, frameMargin - size * 0.02, mountainBase, frameMargin + frameWidth * 0.52, mountainTopA, frameMargin + frameWidth * 0.78, mountainBase)
-        ? hslToRgb(210, 0.62, 0.62)
+        ? [...BRAND.hillFar, 1]
         : null,
     // 近山
     (px, py) =>
       inTriangle(px, py, frameMargin + frameWidth * 0.28, mountainBase, frameMargin + frameWidth * 0.68, mountainTopB, frameMargin + frameWidth * 1.05, mountainBase)
-        ? [40, 73, 190, 1]
+        ? [...BRAND.hillNear, 1]
         : null,
     // 白色高光边
     (px, py) => {

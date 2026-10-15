@@ -91,10 +91,42 @@ g/
 │   └── fixture-server.md        本地夹具服务器的启动说明
 ├── tools/
 │   ├── make-assets.mjs          生成图标与测试图片（可重复执行）
-│   └── check-syntax.mjs         静态检查：语法、import/export 一致性、清单、HTML 引用、消息类型覆盖
-└── docs/
+│   ├── make-extension-zip.mjs   打包 docs/downloads/ImageGrab-v1.0.0.zip（只收运行所需文件）
+│   ├── check-syntax.mjs         静态检查：语法、import/export 一致性、清单、HTML 引用、消息类型覆盖
+│   └── check-contrast.mjs       官网配色对比度检查（读 site.css 的令牌，要求正文 ≥ 4.5:1）
+└── docs/                        ← GitHub Pages 的站点根目录
+    ├── index.html               产品官网单页（插件介绍、界面展示、安装与使用步骤、常见问题、下载）
+    ├── .nojekyll                让 Pages 原样发布（不跑 Jekyll，保住下划线开头的文件）
+    ├── assets/                  站点样式、交互脚本与图标副本
+    ├── downloads/               ImageGrab-v1.0.0.zip，下载按钮用相对路径指向这里
     ├── testing.md               完整测试步骤
     └── troubleshooting.md       排障手册
+```
+
+## 产品官网
+
+`docs/` 同时是 GitHub Pages 的站点根目录：纯 HTML / CSS / JavaScript，没有构建步骤，也不需要依赖安装。
+
+- 页面结构：Hero → 界面展示（结果页与悬浮面板示意图）→ 核心功能 → 支持的网站 → 安装步骤 → 使用步骤 → 常见问题 → 下载。
+- 配色：暖橙主色 `#c2410c` + 米白背景 `#fffbf4` + 深灰文字 `#241f1a`，不使用蓝紫色渐变。色值集中写在 `docs/assets/site.css` 的 `:root` 里。
+- 响应式：320 / 375 / 414 / 768 / 1024 / 1440 六档都不出现横向滚动；手机端吸顶栏只留品牌与下载按钮，分区链接从页脚跳转。
+- 无障碍：正文对比度全部 ≥ 4.5:1、可见焦点环、44px 最小点击区、尊重 `prefers-reduced-motion`。
+
+下载按钮指向 `downloads/ImageGrab-v1.0.0.zip`（相对路径，Pages 与本地 `file://` 都能用）。压缩包由脚本生成，改完 `manifest.json`、`assets/`、`src/` 或 `README.md` 之后要重新打包：
+
+```bash
+node tools/make-assets.mjs        # 改了图标配色时才需要
+node tools/make-extension-zip.mjs # 重新生成 docs/downloads/ImageGrab-v1.0.0.zip
+node tools/check-contrast.mjs     # 改了 site.css 的颜色令牌时跑一遍
+```
+
+`make-extension-zip.mjs` 只收 `manifest.json`、`README.md`、`assets/`、`src/`，并且在打包时硬性校验：一旦 `.git`、`.gitignore`、`docs`、`test`、`tools`、`node_modules` 出现在包里就直接报错退出，而不是悄悄打进去。
+
+本地预览官网：
+
+```bash
+python -m http.server 8765 --directory docs
+# 浏览器打开 http://127.0.0.1:8765/
 ```
 
 ## 权限说明
@@ -117,8 +149,9 @@ g/
 ### 0. 离线自检（不需要浏览器，最快）
 
 ```bash
-node test/unit-check.mjs     # 地址补全、srcset、原图还原、去重、过滤（含被过滤条目的原因）、平台判定、文案完整性
-node tools/check-syntax.mjs  # 语法、模块 import/export 一致性、manifest 与 HTML 文件引用、消息类型覆盖
+node test/unit-check.mjs      # 地址补全、srcset、原图还原、去重、过滤（含被过滤条目的原因）、平台判定、文案完整性
+node tools/check-syntax.mjs   # 语法、模块 import/export 一致性、manifest 与 HTML 文件引用、消息类型覆盖
+node tools/check-contrast.mjs # 官网配色对比度（读 docs/assets/site.css 的 :root 令牌）
 ```
 
 `check-syntax.mjs` 会检查两类「语法层面查不出来、只在运行时炸」的错误：每个模块的导出与别人 import 的名字是否对得上（错了会抛 `TypeError`），以及每个消息类型是否既有发出方、又登记了处理方（错了会报「未知消息类型」）。
@@ -224,7 +257,7 @@ Service Worker 被浏览器回收导致任务中断。刷新结果页后点「�
 - 所有阈值、上限、消息类型、错误文案集中在 [src/shared/constants.js](src/shared/constants.js)；
 - 平台差异集中在 [src/content/platform-rules.js](src/content/platform-rules.js) 与原图还原规则（`src/shared/url-utils.js` 的 `ALI_RESIZE_SUFFIX_PATTERNS` / `JD_PATH_REPLACERS` / `PDD_QUERY_BLOCKLIST`）；「哪两个地址算同一张图」集中在 `src/shared/url-utils.js` 的 `makeDedupeKey`（含 `TRACKING_QUERY_RE` 与 `CDN_RULES`）；
 - 内容脚本侧全为 ES Module：声明式 content script 不支持 ESM，因此 [src/content/content-script.js](src/content/content-script.js) 只是一个 classic 引导脚本，用 `import()` 动态加载 `ui-panel.js`（新增 `src/content/` / `src/shared/` 下的模块无需改清单，通配符已覆盖；新增**其它目录**的模块才需要加进 `web_accessible_resources`）；
-- 改动后请跑一遍 `node test/unit-check.mjs` 与 `node tools/check-syntax.mjs`。
+- 改动后请跑一遍 `node test/unit-check.mjs` 与 `node tools/check-syntax.mjs`；改过 `docs/assets/site.css` 的颜色令牌再跑 `node tools/check-contrast.mjs`。
 
 ## 许可
 

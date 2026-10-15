@@ -35,12 +35,15 @@ credentials.json
 service-account*.json
 token*.json
 
-# ── 打包产物 ─────────────────────────────────────────────────────
+# ── 打包产物 ──────────────────────────────────────────────────
 *.zip
 *.tar
 *.tar.gz
 release/
 web-ext-artifacts/
+
+# 例外：官网下载按钮指向的安装包必须进仓库，否则 GitHub Pages 上没有这个文件
+!docs/downloads/*.zip
 
 # ── 系统文件 ─────────────────────────────────────────────────────
 .DS_Store
