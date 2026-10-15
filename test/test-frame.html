@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ImageGrab 测试用同源 iframe</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 10px;
+        font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        font-size: 12px;
+        color: #6b7280;
+        background: #fff;
+      }
+
+      img {
+        display: block;
+        width: 100%;
+        max-width: 480px;
+        height: auto;
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      同源 iframe：content script 会递归扫描它。
+      这里只放一张独有的图，便于在结果页确认 iframe 里的图片确实被收集。
+    -->
+    <img src="images/frame-image.png" alt="iframe 内的图片 480×360" />
+    <p>iframe 内的图片（frame-image.png · 480×360）应出现在结果页。</p>
+  </body>
+</html>

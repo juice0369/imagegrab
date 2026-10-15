@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>图提取 ImageGrab · 本地测试页</title>
+    <style>
+      :root {
+        --line: #e4e7ef;
+        --dim: #6b7280;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background: #f5f6fa;
+        color: #1f2430;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      header.site-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 12px 24px;
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+      }
+
+      header.site-header img {
+        height: 40px;
+        width: auto;
+      }
+
+      nav.site-nav {
+        display: flex;
+        gap: 12px;
+        color: var(--dim);
+      }
+
+      footer.site-footer {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 24px;
+        margin-top: 24px;
+        background: #eef1f8;
+        color: var(--dim);
+      }
+
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 20px 24px 40px;
+      }
+
+      h1 {
+        font-size: 22px;
+        margin: 8px 0 4px;
+      }
+
+      h2 {
+        font-size: 16px;
+        margin: 28px 0 8px;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
+      }
+
+      p.hint {
+        color: var(--dim);
+        margin: 4px 0 12px;
+      }
+
+      .warn,
+      .ok {
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #fff;
+        margin: 12px 0;
+      }
+
+      .warn {
+        border-left: 4px solid #e8a33d;
+      }
+
+      .ok {
+        border-left: 4px solid #17a673;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+        font-size: 13px;
+      }
+
+      th,
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #f7f8fc;
+        font-weight: 600;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      code {
+        padding: 1px 5px;
+        border-radius: 5px;
+        background: #eef1f8;
+        font-size: 12.5px;
+      }
+
+      .figures {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      figure {
+        margin: 0;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px;
+        max-width: 280px;
+      }
+
+      figure img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 6px;
+      }
+
+      figcaption {
+        margin-top: 6px;
+        color: var(--dim);
+        font-size: 12px;
+      }
+
+      .bg-inline {
+        height: 220px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background-image: url('images/bg-hero.png');
+        background-size: cover;
+        background-position: center;
+        display: flex;
+        align-items: flex-end;
+        justify-content: flex-start;
+        color: #fff;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+        padding: 10px;
+      }
+
+      .bg-from-css {
+        width: 600px;
+        height: 200px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background-image: url('images/bg-tile.png');
+        background-size: cover;
+        color: #fff;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: flex-end;
+        padding: 10px;
+      }
+
+      .slot {
+        display: inline-block;
+        border: 1px dashed #c8cedd;
+        border-radius: 8px;
+        background: #fff;
+        padding: 4px;
+      }
+
+      iframe {
+        width: 100%;
+        max-width: 560px;
+        height: 260px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- 页眉：图片应当被「装饰区域」规则过滤掉（logo 还会额外命中 URL 黑名单） -->
+    <header class="site-header">
+      <img src="images/logo-site.png" alt="站点 logo" />
+      <img src="images/lazy-two.png" alt="页眉装饰图（用于测试装饰区域过滤）" width="120" height="90" />
+      <nav class="site-nav"><span>首页</span><span>分类</span><span>关于</span></nav>
+    </header>
+
+    <main>
+      <h1>图提取 ImageGrab · 本地测试页</h1>
+      <p class="hint">
+        这一页不依赖任何电商网站，用来验证提取逻辑：扫描范围、原图还原、去重、过滤规则、转 PNG 与批量下载。
+      </p>
+
+      <div id="protocol-warning" class="warn" hidden>
+        当前是 <code>file://</code> 打开，content script 不会注入。请用本地服务器访问：
+        <code>python -m http.server 8000</code> 后打开
+        <code>http://localhost:8000/test/test-page.html</code>。
+      </div>
+      <div id="extension-warning" class="warn" hidden>
+        没有检测到 ImageGrab 面板。请确认：① 已在 <code>chrome://extensions</code> 加载本扩展；
+        ② 通过 <code>http://localhost:8000/...</code> 访问本页；③ 点击扩展的刷新按钮后重载本页。
+      </div>
+      <div id="extension-ok" class="ok" hidden>
+        已检测到 ImageGrab 面板：点击页面右下角的「获取图片」开始测试。
+      </div>
+
+      <h2>1. 预期结果（对照检查）</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>场景</th>
+            <th>测试资源</th>
+            <th>预期行为</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>普通图片</td>
+            <td>photo-a / photo-b / photo-c / photo-large</td>
+            <td>全部保留，尺寸与真实像素一致</td>
+          </tr>
+          <tr>
+            <td>srcset 与 picture</td>
+            <td>srcset-large.png（最大候选）、srcset-small.png</td>
+            <td>只保留最大候选，小图不再单独出现</td>
+          </tr>
+          <tr>
+            <td>懒加载</td>
+            <td>lazy-one.png / lazy-two.png（data-src）</td>
+            <td>开启「扫描前自动滚动」后能被收集到</td>
+          </tr>
+          <tr>
+            <td>背景图</td>
+            <td>bg-hero.png（内联 style）、bg-tile.png（CSS 类）</td>
+            <td>两种背景图都要被收集</td>
+          </tr>
+          <tr>
+            <td>重复图片</td>
+            <td>photo-dup.png 出现两次；photo-a_400x400.png 与 photo-a.png</td>
+            <td>只保留 1 条，且缩略图被还原成 photo-a.png</td>
+          </tr>
+          <tr>
+            <td>小尺寸 / 占位</td>
+            <td>photo-small.png（40×40）、spacer-1x1.png、1×1 GIF、SVG data 图</td>
+            <td>全部被过滤（尺寸过小 / 1x1 / 占位 data 图）</td>
+          </tr>
+          <tr>
+            <td>图标与装饰</td>
+            <td>logo-site.png、页眉里的 lazy-two.png、页脚里的 photo-footer.png</td>
+            <td>被过滤（URL 黑名单 / 装饰区域）</td>
+          </tr>
+          <tr>
+            <td>细长条</td>
+            <td>banner-wide.png（1200×100）</td>
+            <td>被过滤（长宽比异常）</td>
+          </tr>
+          <tr>
+            <td>404 图片</td>
+            <td>missing-on-purpose.png（故意不存在）</td>
+            <td>出现在列表但无法预览，下载时失败并给出原因</td>
+          </tr>
+          <tr>
+            <td>无 CORS 的跨域图</td>
+            <td>http://127.0.0.1:8001/no-cors.png</td>
+            <td>扩展直连与页内回退都受限 → 按原格式降级下载</td>
+          </tr>
+          <tr>
+            <td>同源 iframe</td>
+            <td>frame-image.png（在 test-frame.html 里）</td>
+            <td>递归扫描同源 iframe，图片被收集</td>
+          </tr>
+          <tr>
+            <td>Shadow DOM</td>
+            <td>shadow-image.png（自定义元素的 shadow root 内）</td>
+            <td>递归下钻 shadowRoot，图片被收集</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="hint">
+        目标数量：结果页应显示 <strong>14 张</strong> 图片（其中 1 张 404、1 张无 CORS 会在下载阶段给出失败/降级反馈）。
+      </p>
+
+      <h2>2. 普通图片</h2>
+      <div class="figures">
+        <figure>
+          <img src="images/photo-a.png" alt="photo-a 600×400" />
+          <figcaption>photo-a.png · 600×400</figcaption>
+        </figure>
+        <figure>
+          <img src="images/photo-b.png" alt="photo-b 800×600" />
+          <figcaption>photo-b.png · 800×600</figcaption>
+        </figure>
+        <figure>
+          <img src="images/photo-c.png" alt="photo-c 1024×768" />
+          <figcaption>photo-c.png · 1024×768</figcaption>
+        </figure>
+        <figure>
+          <img src="images/photo-large.png" alt="photo-large 1600×1200" />
+          <figcaption>photo-large.png · 1600×1200</figcaption>
+        </figure>
+      </div>
+      <p class="hint">
+        顺带测一下 <code>a[href]</code> 收集：<a href="images/photo-c.png">这张图已经被上面收集过</a>，预期会算作重复。
+      </p>
+
+      <h2>3. srcset 与 picture</h2>
+      <div class="figures">
+        <figure>
+          <picture>
+            <source srcset="images/srcset-small.png 320w, images/srcset-large.png 1280w" />
+            <img src="images/srcset-small.png" alt="picture 里的最大候选" />
+          </picture>
+          <figcaption>picture → 取 1280w 的 srcset-large.png</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="images/photo-b.png"
+            srcset="images/photo-b.png 1x, images/photo-large.png 2x"
+            alt="密度描述符"
+          />
+          <figcaption>img[srcset] 密度描述符 → 取 2x（photo-large.png，已收集，算重复）</figcaption>
+        </figure>
+      </div>
+
+      <h2>4. 懒加载（data-src）</h2>
+      <p class="hint">这两张图在滚动到可视区域前不会被赋值给 src，用来验证「扫描前自动滚动」预热。</p>
+      <div class="figures">
+        <figure>
+          <img
+            class="lazy"
+            src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+            data-src="images/lazy-one.png"
+            alt="懒加载图 1"
+            width="640"
+            height="480"
+          />
+          <figcaption>lazy-one.png · 640×480</figcaption>
+        </figure>
+        <figure>
+          <img
+            class="lazy"
+            src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+            data-src="images/lazy-two.png"
+            alt="懒加载图 2"
+            width="720"
+            height="540"
+          />
+          <figcaption>lazy-two.png · 720×540</figcaption>
+        </figure>
+      </div>
+
+      <h2>5. 背景图</h2>
+      <div class="bg-inline">内联 style 的 background-image（bg-hero.png · 900×300）</div>
+      <p></p>
+      <div class="bg-from-css">CSS 类里的 background-image（bg-tile.png · 600×200）</div>
+
+      <h2>6. 重复图片</h2>
+      <div class="figures">
+        <figure>
+          <img src="images/photo-dup.png" alt="重复图 1" />
+          <figcaption>photo-dup.png（第一次出现）</figcaption>
+        </figure>
+        <figure>
+          <img src="images/photo-dup.png" alt="重复图 2" />
+          <figcaption>photo-dup.png（第二次出现，预期被去重）</figcaption>
+        </figure>
+        <figure>
+          <img src="images/photo-a_400x400.png" alt="photo-a 的缩略图版本" />
+          <figcaption>photo-a_400x400.png（预期还原并合并进 photo-a.png）</figcaption>
+        </figure>
+      </div>
+
+      <h2>7. 应该被过滤掉的图片</h2>
+      <div class="figures">
+        <figure>
+          <img src="images/photo-small.png" alt="40×40 小图" />
+          <figcaption>photo-small.png · 40×40 → 尺寸过小</figcaption>
+        </figure>
+        <figure>
+          <span class="slot"><img src="images/spacer-1x1.png" alt="1×1 占位" width="1" height="1" /></span>
+          <figcaption>spacer-1x1.png → 尺寸过小 / 命中 1x1</figcaption>
+        </figure>
+        <figure>
+          <img src="images/banner-wide.png" alt="1200×100 细长条" />
+          <figcaption>banner-wide.png · 1200×100 → 长宽比异常</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3C/svg%3E"
+            alt="data 占位图"
+          />
+          <figcaption>data:image/svg+xml 占位图 → 体积过小的 data 图</figcaption>
+        </figure>
+      </div>
+
+      <h2>8. 失败场景</h2>
+      <div class="figures">
+        <figure>
+          <img src="images/missing-on-purpose.png" alt="故意 404 的图片" width="400" height="300" />
+          <figcaption>missing-on-purpose.png → 404，无法预览，下载时失败</figcaption>
+        </figure>
+        <figure>
+          <img src="http://127.0.0.1:8001/no-cors.png" alt="无 CORS 头的跨域图" width="600" height="400" />
+          <figcaption>
+            http://127.0.0.1:8001/no-cors.png → 需要先启动 <code>node test/no-cors-server.mjs</code>
+          </figcaption>
+        </figure>
+      </div>
+
+      <h2>9. 同源 iframe 与 Shadow DOM</h2>
+      <p class="hint">跨域 iframe 属于浏览器安全边界，明确不处理；同源 iframe 与 shadowRoot 会递归扫描。</p>
+      <iframe src="test-frame.html" title="同源 iframe 测试"></iframe>
+      <p></p>
+      <div id="shadow-host"></div>
+    </main>
+
+    <!-- 页脚：这里的图片与图片链接都应当按「装饰区域」过滤 -->
+    <footer class="site-footer">
+      <img src="images/photo-footer.png" alt="页脚装饰图 500×500，应被过滤" width="80" height="80" />
+      <a href="images/photo-footer.png">页脚里的图片链接</a>
+      <span>图提取 ImageGrab · 本地测试夹具</span>
+    </footer>
+
+    <script src="test-page.js"></script>
+  </body>
+</html>

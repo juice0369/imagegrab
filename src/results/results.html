@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>图提取 ImageGrab · 提取结果</title>
+    <link rel="stylesheet" href="results.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <img class="brand-icon" src="../../assets/icons/icon48.png" alt="" width="36" height="36" />
+        <div class="brand-text">
+          <h1>图提取 ImageGrab</h1>
+          <p id="session-summary" class="brand-sub">正在读取提取结果…</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btn-source" class="btn ghost" type="button" hidden>查看源页面</button>
+        <button id="btn-reload" class="btn ghost" type="button">重新读取</button>
+      </div>
+    </header>
+
+    <section id="banner" class="banner" hidden></section>
+    <section id="notice" class="notice" hidden></section>
+
+    <section id="toolbar" class="toolbar" hidden>
+      <div class="toolbar-group">
+        <button id="btn-select-all" class="btn" type="button">全选</button>
+        <button id="btn-invert" class="btn" type="button">反选</button>
+        <button id="btn-select-none" class="btn" type="button">取消选择</button>
+        <button id="btn-select-failed" class="btn" type="button">选中失败项</button>
+      </div>
+      <div class="toolbar-group toolbar-filters">
+        <label class="field">
+          <span>尺寸</span>
+          <select id="filter-size">
+            <option value="all">全部</option>
+            <option value="w400">长边 ≥ 400</option>
+            <option value="w800">长边 ≥ 800</option>
+            <option value="w1200">长边 ≥ 1200</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>状态</span>
+          <select id="filter-status">
+            <option value="all">全部</option>
+            <option value="none">未处理</option>
+            <option value="failed">失败</option>
+            <option value="done">已完成</option>
+          </select>
+        </label>
+        <span id="visible-count" class="counter">显示 0 / 0</span>
+      </div>
+    </section>
+
+    <section id="runbar" class="runbar" hidden>
+      <div class="runbar-status">
+        <span id="job-status" class="runbar-text">尚未开始下载。</span>
+        <div id="progress-wrap" class="progress" hidden><div id="progress-bar" class="progress-bar"></div></div>
+      </div>
+      <div class="runbar-actions">
+        <button id="btn-download" class="btn primary" type="button">下载选中（0）</button>
+        <button id="btn-resume" class="btn" type="button" hidden>继续下载</button>
+        <button id="btn-cancel" class="btn danger" type="button" hidden>取消任务</button>
+      </div>
+    </section>
+
+    <main id="grid" class="grid" aria-live="polite"></main>
+    <section id="empty" class="empty" hidden></section>
+
+    <footer class="app-footer">
+      <span id="footer-hint">图片只在本机处理：先转成 PNG 再交给浏览器下载，不上传任何数据。</span>
+    </footer>
+
+    <script type="module" src="results.js"></script>
+  </body>
+</html>

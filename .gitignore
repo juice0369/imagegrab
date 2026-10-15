@@ -1,0 +1,58 @@
+# ── 依赖与构建产物（本项目零依赖零构建，保留以防万一）───────────────
+node_modules/
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# ── 本地调试与临时文件 ────────────────────────────────────────────
+*.log
+logs/
+tmp/
+temp/
+.cache/
+*.tmp
+*.bak
+*.orig
+*.rej
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# ── 密钥与凭据（绝不提交）────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crx
+*.crx.key
+secrets.json
+credentials.json
+service-account*.json
+token*.json
+
+# ── 打包产物 ─────────────────────────────────────────────────────
+*.zip
+*.tar
+*.tar.gz
+release/
+web-ext-artifacts/
+
+# ── 系统文件 ─────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ── 测试与覆盖率 ─────────────────────────────────────────────────
+coverage/
+.nyc_output/
+test/tmp/

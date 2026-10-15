@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ImageGrab 转换宿主</title>
+  </head>
+  <body>
+    <!--
+      offscreen 文档：没有人看得到这个页面。
+      存在的唯一理由是 MV3 service worker 里没有 URL.createObjectURL，
+      而下载需要 blob:chrome-extension://<id>/… 这样的地址。
+    -->
+    <p>ImageGrab offscreen document</p>
+    <script type="module" src="offscreen.js"></script>
+  </body>
+</html>

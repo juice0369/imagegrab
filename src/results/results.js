@@ -1,0 +1,750 @@
+/**
+ * 结果页逻辑：读会话 → 渲染网格 → 选择交互 → 通过长连接驱动批量下载 → 回显进度与失败原因。
+ *
+ * 数据来源是 chrome.storage.session（不是 content script、也不是内存），所以刷新页面不丢数据。
+ */
+
+import {
+  PORT_NAME,
+  PORT_CMD,
+  PORT_PUSH,
+  ITEM_STATUS,
+  JOB_STATUS,
+  FILTER_REASONS,
+  SIZE_FILTERS,
+  describeError
+} from '../shared/constants.js';
+import { createLogger } from '../shared/logger.js';
+import { sessionStore } from '../background/session-store.js';
+import { createGrid } from './grid.js';
+
+const log = createLogger('results');
+
+const els = {};
+const state = {
+  sid: null,
+  session: null,
+  job: null,
+  selected: new Set(),
+  itemStatus: {},
+  filters: { size: 'all', status: 'all' },
+  visible: [],
+  thumbFailed: new Set(),
+  port: null,
+  requestSeq: 0,
+  pendingRequests: new Map(),
+  reconnectAttempts: 0,
+  reconnectTimer: null,
+  lastSummary: null
+};
+
+const grid = createGrid({
+  container: null, // cacheElements 之后再设置
+  onAction: (action, ...args) => handleGridAction(action, ...args)
+});
+
+/* ────────────────────────── 启动 ────────────────────────── */
+
+async function main() {
+  cacheElements();
+  grid.setContainer?.(els.grid);
+
+  const params = new URLSearchParams(location.search);
+  state.sid = params.get('sid');
+  if (!state.sid) {
+    const latest = await sessionStore.latest();
+    state.sid = latest?.sid || null;
+    log.info(`URL 未带 sid，使用最近一次会话：${state.sid || '（无）'}`);
+  }
+
+  wireUi();
+
+  if (!state.sid) {
+    showEmpty('none');
+    return;
+  }
+
+  await loadSession();
+  if (!state.session) {
+    showEmpty('gone');
+    return;
+  }
+
+  state.selected = new Set(defaultSelection());
+  render();
+  connect();
+}
+
+function cacheElements() {
+  const ids = [
+    'session-summary',
+    'banner',
+    'notice',
+    'toolbar',
+    'runbar',
+    'job-status',
+    'progress-wrap',
+    'progress-bar',
+    'btn-source',
+    'btn-reload',
+    'btn-select-all',
+    'btn-invert',
+    'btn-select-none',
+    'btn-select-failed',
+    'filter-size',
+    'filter-status',
+    'visible-count',
+    'btn-download',
+    'btn-resume',
+    'btn-cancel',
+    'grid',
+    'empty',
+    'footer-hint'
+  ];
+  for (const id of ids) els[id] = document.getElementById(id);
+  grid.setContainer?.(els.grid);
+}
+
+async function loadSession() {
+  state.session = await sessionStore.get(state.sid);
+  if (!state.session) return;
+  const job = latestJobOf(state.session);
+  state.job = job;
+  state.itemStatus = { ...(job?.itemStatus || {}) };
+}
+
+function latestJobOf(session) {
+  const jobs = Object.values(session?.jobs || {});
+  if (!jobs.length) return null;
+  return jobs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+}
+
+/** 默认勾选：没成功过、也没原格式降级过的图片。 */
+function defaultSelection() {
+  return (state.session?.images || [])
+    .filter((item) => {
+      const status = state.itemStatus[item.id]?.status;
+      return status !== ITEM_STATUS.DONE && status !== ITEM_STATUS.FALLBACK;
+    })
+    .map((item) => item.id);
+}
+
+/* ───────────────────── 长连接（results ↔ SW） ───────────────────── */
+
+function connect() {
+  if (!chrome.runtime?.id) {
+    setNotice('error', '扩展已重新加载，请刷新本页后重试。');
+    return;
+  }
+  let port;
+  try {
+    port = chrome.runtime.connect({ name: PORT_NAME });
+  } catch (err) {
+    scheduleReconnect(err);
+    return;
+  }
+  state.port = port;
+  state.reconnectAttempts = 0;
+
+  port.onMessage.addListener(onPortMessage);
+  port.onDisconnect.addListener(() => {
+    state.port = null;
+    for (const entry of state.pendingRequests.values()) entry.reject(new Error('与后台的连接已断开'));
+    state.pendingRequests.clear();
+    scheduleReconnect();
+  });
+
+  port.postMessage({ cmd: PORT_CMD.INIT, sid: state.sid });
+}
+
+function scheduleReconnect(cause) {
+  if (!chrome.runtime?.id) {
+    setNotice('error', '扩展已重新加载，请刷新本页后重试。');
+    return;
+  }
+  if (state.reconnectTimer) return;
+  if (state.reconnectAttempts >= 5) {
+    setNotice('error', '与后台的连接已断开（Service Worker 可能被回收）。请重新加载本页。');
+    return;
+  }
+  state.reconnectAttempts += 1;
+  setStatusline(`正在重连后台（第 ${state.reconnectAttempts} 次）…`);
+  state.reconnectTimer = setTimeout(() => {
+    state.reconnectTimer = null;
+    connect();
+  }, 1200);
+  if (cause) log.warn('连接断开', cause);
+}
+
+function onPortMessage(message) {
+  if (!message || typeof message.type !== 'string') return;
+  switch (message.type) {
+    case PORT_PUSH.ACK: {
+      const entry = state.pendingRequests.get(message.reqId);
+      if (!entry) return;
+      state.pendingRequests.delete(message.reqId);
+      if (message.ok) {
+        entry.resolve(message.data || {});
+      } else {
+        const error = new Error(message.error?.message || '操作失败');
+        error.code = message.error?.code;
+        entry.reject(error);
+      }
+      return;
+    }
+
+    case PORT_PUSH.STATE: {
+      applyState(message.state);
+      return;
+    }
+
+    case PORT_PUSH.ITEM_PROGRESS: {
+      state.itemStatus[message.itemId] = {
+        status: message.status,
+        error: message.error || null,
+        message: message.message || '',
+        filename: message.filename || '',
+        via: message.via || '',
+        width: message.width || 0,
+        height: message.height || 0
+      };
+      grid.update(message.itemId);
+      updateCounts();
+      updateRunbar();
+      return;
+    }
+
+    case PORT_PUSH.JOB_UPDATE: {
+      state.job = message.job;
+      mergeItemStatus(message.job?.itemStatus);
+      updateCounts();
+      updateRunbar();
+      return;
+    }
+
+    case PORT_PUSH.BATCH_DONE: {
+      if (message.job) {
+        state.job = message.job;
+        mergeItemStatus(message.job.itemStatus);
+      }
+      state.lastSummary = message.summary || null;
+      grid.refreshAll();
+      updateCounts();
+      updateRunbar();
+      renderNoticeForSummary(message.summary);
+      return;
+    }
+
+    case PORT_PUSH.SOURCE_STATE: {
+      if (state.session) state.session.sourceAlive = message.sourceAlive;
+      renderBanner();
+      return;
+    }
+
+    case PORT_PUSH.SESSION_GONE: {
+      showEmpty('gone');
+      return;
+    }
+
+    case PORT_PUSH.ERROR: {
+      setNotice('warn', `后台提示：${message.error?.message || '未知问题'}`);
+      return;
+    }
+
+    default:
+      log.debug('未处理的推送', message.type);
+  }
+}
+
+function mergeItemStatus(itemStatus) {
+  if (!itemStatus) return;
+  for (const [itemId, info] of Object.entries(itemStatus)) {
+    state.itemStatus[itemId] = { ...(state.itemStatus[itemId] || {}), ...info };
+  }
+}
+
+function applyState(payload) {
+  if (!payload?.session) {
+    showEmpty('gone');
+    return;
+  }
+  state.session = payload.session;
+  state.job = payload.job || null;
+  if (payload.job?.itemStatus) mergeItemStatus(payload.job.itemStatus);
+  render();
+}
+
+/** 走长连接的请求/应答封装。 */
+function request(cmd, payload = {}, timeoutMs = 20000) {
+  return new Promise((resolve, reject) => {
+    const port = state.port;
+    if (!port) {
+      reject(new Error('与后台的连接尚未建立，请稍后重试'));
+      return;
+    }
+    const reqId = ++state.requestSeq;
+    const timer = setTimeout(() => {
+      if (state.pendingRequests.delete(reqId)) reject(new Error('后台没有及时响应'));
+    }, timeoutMs);
+    state.pendingRequests.set(reqId, {
+      resolve: (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      reject: (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    });
+    port.postMessage({ cmd, reqId, ...payload });
+  });
+}
+
+/* ────────────────────────── 渲染 ────────────────────────── */
+
+function render() {
+  if (!state.session) return;
+  els['empty'].hidden = true;
+  els.toolbar.hidden = false;
+  els.runbar.hidden = false;
+
+  renderSummary();
+  renderBanner();
+  renderGrid();
+  updateCounts();
+  updateRunbar();
+}
+
+function renderSummary() {
+  const session = state.session;
+  const images = session.images || [];
+  const created = session.createdAt ? new Date(session.createdAt).toLocaleString() : '';
+  const prefix = session.settings?.filenamePrefix || '商品图';
+  els['session-summary'].textContent =
+    `${session.platformName || '未知站点'} · 共 ${images.length} 张图片` +
+    `${session.pageTitle ? ` · ${truncate(session.pageTitle, 40)}` : ''}${created ? ` · ${created}` : ''}` +
+    ` · 文件名 ${prefix}_001.png`;
+  els['footer-hint'].textContent = `图片只在本机处理：先转成 PNG 再交给浏览器下载，不上传任何数据。源页面：${
+    session.pageUrl || '（未知）'
+  }`;
+  els['btn-source'].hidden = !session.sourceTabId;
+}
+
+function renderBanner() {
+  const session = state.session;
+  const stats = session.filterStats;
+  const lines = [];
+
+  if (session.sourceAlive === false) {
+    lines.push('源页面已关闭：图片地址已经保存下来，不影响继续转换与下载。');
+  }
+
+  if (stats) {
+    lines.push(
+      `扫描到 ${stats.scanned} 个图片地址，保留 ${stats.kept} 张` +
+        (stats.dropped ? `，过滤掉 ${stats.dropped} 张。` : '。')
+    );
+  }
+
+  const failed = state.thumbFailed.size;
+  if (failed) {
+    lines.push(`${failed} 张图片在这个页面里无法预览（可能已失效、需要登录或有防盗链），下载时也可能失败。`);
+  }
+
+  if (!lines.length && !(stats && stats.dropped)) {
+    els.banner.hidden = true;
+    return;
+  }
+
+  els.banner.hidden = false;
+  els.banner.textContent = '';
+
+  const title = document.createElement('p');
+  title.className = 'banner-title';
+  title.textContent = '提取情况';
+  els.banner.appendChild(title);
+
+  const list = document.createElement('ul');
+  list.className = 'banner-lines';
+  for (const line of lines) {
+    const li = document.createElement('li');
+    li.textContent = line;
+    list.appendChild(li);
+  }
+  els.banner.appendChild(list);
+
+  if (stats && stats.dropped) {
+    const details = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = '为什么图片比我预期的少？';
+    details.appendChild(summary);
+    const reasons = document.createElement('ul');
+    reasons.className = 'reason-list';
+    for (const [key, value] of Object.entries(stats.reasons || {})) {
+      if (!value) continue;
+      const li = document.createElement('li');
+      li.textContent = `${FILTER_REASONS[key] || key}：${value} 张`;
+      reasons.appendChild(li);
+    }
+    if (stats.truncated) {
+      const li = document.createElement('li');
+      li.textContent = `超过单次提取上限，未保留：${stats.truncated} 张`;
+      reasons.appendChild(li);
+    }
+    if (!reasons.childElementCount) {
+      const li = document.createElement('li');
+      li.textContent = '没有条目被过滤。';
+      reasons.appendChild(li);
+    }
+    details.appendChild(reasons);
+    els.banner.appendChild(details);
+  }
+}
+
+function computeVisible() {
+  const images = state.session?.images || [];
+  const sizeFilter = SIZE_FILTERS.find((entry) => entry.id === state.filters.size) || SIZE_FILTERS[0];
+  const statusFilter = state.filters.status;
+
+  return images.filter((item) => {
+    if (sizeFilter.min > 0) {
+      const width = item.naturalWidth || item.domWidth || 0;
+      const height = item.naturalHeight || item.domHeight || 0;
+      const longEdge = Math.max(width, height);
+      // 尺寸未知的条目始终显示，避免看起来像丢了数据
+      if (longEdge > 0 && longEdge < sizeFilter.min) return false;
+    }
+    if (statusFilter === 'all') return true;
+    const status = state.itemStatus[item.id]?.status || ITEM_STATUS.PENDING;
+    if (statusFilter === 'failed') return status === ITEM_STATUS.FAILED;
+    if (statusFilter === 'done') return status === ITEM_STATUS.DONE || status === ITEM_STATUS.FALLBACK;
+    if (statusFilter === 'none') return status !== ITEM_STATUS.DONE && status !== ITEM_STATUS.FALLBACK && status !== ITEM_STATUS.FAILED;
+    return true;
+  });
+}
+
+function renderGrid() {
+  state.visible = computeVisible();
+  grid.render(state.visible).catch((err) => log.error('渲染网格失败', err));
+}
+
+function handleGridAction(action, ...args) {
+  switch (action) {
+    case 'status':
+      return state.itemStatus[args[0]] || { status: ITEM_STATUS.PENDING };
+    case 'selected':
+      return state.selected.has(args[0]);
+    case 'toggle': {
+      const [itemId, selected] = args;
+      if (selected) state.selected.add(itemId);
+      else state.selected.delete(itemId);
+      grid.refreshSelection(itemId);
+      updateCounts();
+      return undefined;
+    }
+    case 'download-one':
+      startDownload([args[0]]);
+      return undefined;
+    case 'thumb-error':
+      if (!state.thumbFailed.has(args[0])) {
+        state.thumbFailed.add(args[0]);
+        renderBanner();
+      }
+      return undefined;
+    case 'resize':
+      return undefined;
+    default:
+      return undefined;
+  }
+}
+
+function updateCounts() {
+  const imageIds = new Set((state.session?.images || []).map((item) => item.id));
+  for (const id of [...state.selected]) {
+    if (!imageIds.has(id)) state.selected.delete(id);
+  }
+  els['visible-count'].textContent = `显示 ${state.visible.length} / ${imageIds.size}`;
+  const button = els['btn-download'];
+  button.textContent = `下载选中（${state.selected.size}）`;
+  button.disabled = state.selected.size === 0 || Boolean(runningJob());
+}
+
+function runningJob() {
+  return state.job && state.job.status === JOB_STATUS.RUNNING ? state.job : null;
+}
+
+function countStatuses() {
+  const counts = { total: state.session?.images?.length || 0, done: 0, fallback: 0, failed: 0, cancelled: 0, pending: 0 };
+  for (const item of state.session?.images || []) {
+    const status = state.itemStatus[item.id]?.status || ITEM_STATUS.PENDING;
+    if (status === ITEM_STATUS.DONE) counts.done += 1;
+    else if (status === ITEM_STATUS.FALLBACK) counts.fallback += 1;
+    else if (status === ITEM_STATUS.FAILED) counts.failed += 1;
+    else if (status === ITEM_STATUS.CANCELLED) counts.cancelled += 1;
+    else counts.pending += 1;
+  }
+  return counts;
+}
+
+function updateRunbar() {
+  const job = runningJob();
+  const counts = countStatuses();
+  const processed = counts.done + counts.fallback + counts.failed + counts.cancelled;
+
+  els['btn-cancel'].hidden = !job;
+  els['btn-resume'].hidden = Boolean(job) || counts.pending === 0;
+
+  if (job) {
+    els['progress-wrap'].hidden = false;
+    const ratio = job.stats?.total ? job.stats.processed / job.stats.total : 0;
+    els['progress-bar'].style.width = `${Math.round(ratio * 100)}%`;
+    setStatusline(
+      `正在下载：已处理 ${job.stats?.processed || 0}/${job.stats?.total || counts.total} · ` +
+        `成功 ${job.stats?.succeeded || 0} · 原格式 ${job.stats?.fallback || 0} · 失败 ${job.stats?.failed || 0}`
+    );
+    return;
+  }
+
+  if (state.job && state.job.status === JOB_STATUS.INTERRUPTED) {
+    els['progress-wrap'].hidden = true;
+    setStatusline(`上次任务被中断（Service Worker 被回收或浏览器关闭）。还有 ${counts.pending} 张没处理，可以点「继续下载」。`);
+    return;
+  }
+
+  els['progress-wrap'].hidden = true;
+  if (processed === 0) {
+    setStatusline(state.session?.images?.length ? '尚未开始下载。勾选后点「下载选中」。' : '没有图片。');
+    return;
+  }
+  setStatusline(
+    `已完成 ${counts.done} · 原格式 ${counts.fallback} · 失败 ${counts.failed}` +
+      `${counts.cancelled ? ` · 已取消 ${counts.cancelled}` : ''}${counts.pending ? ` · 待处理 ${counts.pending}` : ''}`
+  );
+}
+
+function setStatusline(text) {
+  els['job-status'].textContent = text;
+}
+
+function setNotice(tone, text) {
+  els.notice.hidden = false;
+  els.notice.dataset.tone = tone;
+  els.notice.textContent = text;
+}
+
+function clearNotice() {
+  els.notice.hidden = true;
+  els.notice.textContent = '';
+}
+
+/** 批量结束后的反馈：把失败原因按类型归并，明确告诉用户为什么失败。 */
+function renderNoticeForSummary(summary) {
+  if (!summary) return;
+  const counts = countStatuses();
+  const groups = new Map();
+  for (const [itemId, info] of Object.entries(state.itemStatus)) {
+    if (info.status !== ITEM_STATUS.FAILED) continue;
+    const code = info.error || 'DOWNLOAD_FAILED';
+    if (!groups.has(code)) groups.set(code, { count: 0, message: info.message || describeError(code), files: [] });
+    const group = groups.get(code);
+    // 只在同一状态下用当前条目名举例
+    const item = (state.session?.images || []).find((candidate) => candidate.id === itemId);
+    group.count += 1;
+    if (info.filename) group.files.push(info.filename);
+    else if (item && group.files.length < 3) group.files.push(item.url.split('/').slice(-1)[0]);
+  }
+
+  const parts = [];
+  parts.push(`批量下载结束：成功 ${counts.done} 张`);
+  if (counts.fallback) parts.push(`原格式 ${counts.fallback} 张（转换受限，已按原格式下载，不算失败）`);
+  parts.push(`失败 ${counts.failed} 张`);
+  if (counts.cancelled) parts.push(`取消 ${counts.cancelled} 张`);
+
+  let text = `${parts.join('，')}。`;
+  if (groups.size) {
+    const detail = [...groups.values()]
+      .map((group) => `${group.count} 张：${truncate(group.message, 80)}${group.files.length ? `（例如 ${group.files.slice(0, 2).join('、')}）` : ''}`)
+      .join('；');
+    text += ` 失败原因：${detail}`;
+  }
+
+  setNotice(groups.size ? 'warn' : 'ok', text);
+  log.info('批量任务结束', summary);
+}
+
+function showEmpty(kind) {
+  els.toolbar.hidden = true;
+  els.runbar.hidden = true;
+  els.banner.hidden = true;
+  els.grid.textContent = '';
+  els.empty.hidden = false;
+  els.empty.textContent = '';
+
+  const title = document.createElement('h2');
+  const paragraph = document.createElement('p');
+
+  if (kind === 'gone') {
+    els['session-summary'].textContent = '提取结果已失效';
+    title.textContent = '这批提取结果已经失效';
+    paragraph.append(
+      document.createTextNode('可能原因：浏览器重启、扩展重新加载、会话超过 2 小时，或结果页被关闭后数据已回收。请回到商品详情页，点击右下角的 ')
+    );
+    const code = document.createElement('code');
+    code.textContent = '获取图片';
+    paragraph.append(code, document.createTextNode(' 重新提取。'));
+  } else {
+    els['session-summary'].textContent = '还没有提取记录';
+    title.textContent = '还没有提取记录';
+    paragraph.append(document.createTextNode('打开商品详情页（或本地测试页 '));
+    const code = document.createElement('code');
+    code.textContent = 'http://localhost:8000/test/test-page.html';
+    paragraph.append(code, document.createTextNode('），点击页面右下角的「获取图片」按钮即可开始。'));
+  }
+
+  els.empty.append(title, paragraph);
+  setStatusline('等待新的提取任务。');
+}
+
+/* ────────────────────────── 交互 ────────────────────────── */
+
+function wireUi() {
+  els['btn-select-all'].addEventListener('click', () => {
+    for (const item of state.visible) state.selected.add(item.id);
+    applySelection();
+  });
+
+  els['btn-invert'].addEventListener('click', () => {
+    for (const item of state.visible) {
+      if (state.selected.has(item.id)) state.selected.delete(item.id);
+      else state.selected.add(item.id);
+    }
+    applySelection();
+  });
+
+  els['btn-select-none'].addEventListener('click', () => {
+    state.selected.clear();
+    applySelection();
+  });
+
+  els['btn-select-failed'].addEventListener('click', () => {
+    const failed = Object.entries(state.itemStatus)
+      .filter(([, info]) => info.status === ITEM_STATUS.FAILED)
+      .map(([itemId]) => itemId);
+    if (!failed.length) {
+      setNotice('warn', '当前没有失败的条目。');
+      return;
+    }
+    state.selected = new Set(failed);
+    applySelection();
+    setNotice('ok', `已选中 ${failed.length} 个失败条目，可直接点「下载选中」重试。`);
+  });
+
+  els['filter-size'].addEventListener('change', (event) => {
+    state.filters.size = event.target.value;
+    renderGrid();
+    updateCounts();
+  });
+
+  els['filter-status'].addEventListener('change', (event) => {
+    state.filters.status = event.target.value;
+    renderGrid();
+    updateCounts();
+  });
+
+  els['btn-download'].addEventListener('click', () => {
+    const ids = orderedSelection();
+    startDownload(ids);
+  });
+
+  els['btn-resume'].addEventListener('click', async () => {
+    clearNotice();
+    try {
+      const data = await request(PORT_CMD.RESUME, {});
+      setNotice('ok', `已继续下载 ${data?.ids?.length ?? ''} 张未完成的图片。`);
+    } catch (err) {
+      setNotice('error', `继续下载失败：${err.message}`);
+    }
+  });
+
+  els['btn-cancel'].addEventListener('click', async () => {
+    try {
+      await request(PORT_CMD.CANCEL, {});
+      setNotice('warn', '已取消：未开始的条目不再下载，已经开始的不打断（避免半截文件）。');
+    } catch (err) {
+      setNotice('error', `取消失败：${err.message}`);
+    }
+  });
+
+  els['btn-source'].addEventListener('click', async () => {
+    try {
+      await request(PORT_CMD.FOCUS_SOURCE, {});
+    } catch (err) {
+      setNotice('error', `无法切到源页面：${err.message}`);
+    }
+  });
+
+  els['btn-reload'].addEventListener('click', async () => {
+    clearNotice();
+    state.thumbFailed.clear();
+    try {
+      await request(PORT_CMD.REFRESH, {});
+    } catch (err) {
+      setNotice('error', `重新读取失败：${err.message}`);
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
+      event.preventDefault();
+      for (const item of state.visible) state.selected.add(item.id);
+      applySelection();
+    }
+  });
+}
+
+function applySelection() {
+  grid.refreshAll(state.visible.map((item) => item.id));
+  updateCounts();
+}
+
+/** 按界面顺序（也就是用户看到的顺序）返回选中项。 */
+function orderedSelection() {
+  const order = (state.session?.images || []).map((item) => item.id);
+  return order.filter((itemId) => state.selected.has(itemId));
+}
+
+async function startDownload(ids) {
+  if (!ids.length) {
+    setNotice('warn', '请先勾选要下载的图片。');
+    return;
+  }
+  clearNotice();
+  for (const itemId of ids) {
+    state.itemStatus[itemId] = {
+      ...(state.itemStatus[itemId] || {}),
+      status: ITEM_STATUS.PENDING,
+      message: '排队中…',
+      error: null
+    };
+  }
+  grid.refreshAll(ids);
+  updateCounts();
+  setStatusline(`已提交 ${ids.length} 张，正在准备转换…`);
+  try {
+    await request(PORT_CMD.START_DOWNLOAD, { ids });
+  } catch (err) {
+    setNotice('error', `下载任务没有启动：${err.message}`);
+    setStatusline('任务未启动，可修改选择后重试。');
+  }
+}
+
+function truncate(text, max) {
+  const value = String(text || '');
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+
+main().catch((err) => {
+  log.error('结果页初始化失败', err);
+  setNotice('error', `结果页初始化失败：${err?.message || err}`);
+});
