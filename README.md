@@ -87,13 +87,13 @@ g/
 │   ├── test-frame.html          同源 iframe 测试页
 │   ├── images/                  测试图片（由 tools/make-assets.mjs 生成）
 │   ├── no-cors-server.mjs       「无 CORS 头」图片服务器，用于验证降级链路
-│   ├── unit-check.mjs           纯逻辑自检（225 条断言，不需要浏览器）
+│   ├── unit-check.mjs           纯逻辑自检（248 条断言，不需要浏览器）
 │   └── fixture-server.md        本地夹具服务器的启动说明
 ├── tools/
 │   ├── make-assets.mjs          生成图标与测试图片（可重复执行）
 │   ├── make-extension-zip.mjs   打包 docs/downloads/ImageGrab-v1.0.0.zip（只收运行所需文件）
 │   ├── check-syntax.mjs         静态检查：语法、import/export 一致性、清单、HTML 引用、消息类型覆盖
-│   └── check-contrast.mjs       官网配色对比度检查（读 site.css 的令牌，要求正文 ≥ 4.5:1）
+│   └── check-contrast.mjs       官网配色对比度检查（读 site.css 的令牌，WCAG AA 三档：正文 4.5:1、大字号粗体 3:1、状态图形 3:1）
 └── docs/                        ← GitHub Pages 的站点根目录
     ├── index.html               产品官网单页（插件介绍、界面展示、安装与使用步骤、常见问题、下载）
     ├── .nojekyll                让 Pages 原样发布（不跑 Jekyll，保住下划线开头的文件）
@@ -107,10 +107,10 @@ g/
 
 `docs/` 同时是 GitHub Pages 的站点根目录：纯 HTML / CSS / JavaScript，没有构建步骤，也不需要依赖安装。
 
-- 页面结构：Hero → 界面展示（结果页与悬浮面板示意图）→ 核心功能 → 支持的网站 → 安装步骤 → 使用步骤 → 常见问题 → 下载。
-- 配色：暖橙主色 `#c2410c` + 米白背景 `#fffbf4` + 深灰文字 `#241f1a`，不使用蓝紫色渐变。色值集中写在 `docs/assets/site.css` 的 `:root` 里。
+- 页面结构：首屏 Hero（含结果页示意图）→ 功能介绍（含悬浮面板示意图与支持的平台）→ 使用方法 → 下载（深色区块）→ 安装说明 → 常见问题 → 页脚。
+- 配色：浅色体系。底色 `#f5f5f7`、卡片纯白 `#ffffff`、正文 `#1d1d1f`、次要文字 `#6e6e73`，交互色用蓝色 `#0071e3`（悬停 `#0077ed`）；深色区块用纯黑 `#000000` 与 `#1d1d1f`，深色区次要文字单独用 `#86868b`（`#6e6e73` 在黑底上只有 4.14:1，不达标）。色值集中写在 `docs/assets/site.css` 的 `:root` 里。
 - 响应式：320 / 375 / 414 / 768 / 1024 / 1440 六档都不出现横向滚动；手机端吸顶栏只留品牌与下载按钮，分区链接从页脚跳转。
-- 无障碍：正文对比度全部 ≥ 4.5:1、可见焦点环、44px 最小点击区、尊重 `prefers-reduced-motion`。
+- 无障碍：正文对比度 ≥ 4.5:1、大字号粗体与表示状态的图形 ≥ 3:1（按 WCAG AA 分三档，由 `tools/check-contrast.mjs` 校验）、可见焦点环、44px 最小点击区、尊重 `prefers-reduced-motion`。
 
 下载按钮指向 `downloads/ImageGrab-v1.0.0.zip`（相对路径，Pages 与本地 `file://` 都能用）。压缩包由脚本生成，改完 `manifest.json`、`assets/`、`src/` 或 `README.md` 之后要重新打包：
 
@@ -151,7 +151,7 @@ python -m http.server 8765 --directory docs
 ```bash
 node test/unit-check.mjs      # 地址补全、srcset、原图还原、去重、过滤（含被过滤条目的原因）、平台判定、文案完整性
 node tools/check-syntax.mjs   # 语法、模块 import/export 一致性、manifest 与 HTML 文件引用、消息类型覆盖
-node tools/check-contrast.mjs # 官网配色对比度（读 docs/assets/site.css 的 :root 令牌）
+node tools/check-contrast.mjs # 官网配色对比度（读 docs/assets/site.css 的 :root 令牌，按 WCAG AA 三档判定）
 ```
 
 `check-syntax.mjs` 会检查两类「语法层面查不出来、只在运行时炸」的错误：每个模块的导出与别人 import 的名字是否对得上（错了会抛 `TypeError`），以及每个消息类型是否既有发出方、又登记了处理方（错了会报「未知消息类型」）。
