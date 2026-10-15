@@ -10,6 +10,23 @@ import { ITEM_STATUS, ITEM_STATUS_LABEL, describeError } from '../shared/constan
 
 const BATCH_SIZE = 60;
 
+/**
+ * 把 total 个条目切成互不重叠的区间 `[start, end)`，供分片挂载使用。
+ *
+ * 单独抽出来是为了能被自检脚本直接断言：分片一旦重叠，卡片就会被重复挂进容器
+ * （曾经写成步长 1，59 张图在结果页里变成了上千张卡片）。这里保证每个下标恰好
+ * 属于一个区间，所有区间合起来正好覆盖 [0, total)。
+ */
+export function batchRanges(total, size = BATCH_SIZE) {
+  const count = Math.max(0, Math.floor(Number(total) || 0));
+  const step = Math.max(1, Math.floor(Number(size) || 1));
+  const ranges = [];
+  for (let start = 0; start < count; start += step) {
+    ranges.push([start, Math.min(start + step, count)]);
+  }
+  return ranges;
+}
+
 function sizeText(item, measured) {
   const width = measured?.width || item.naturalWidth || 0;
   const height = measured?.height || item.naturalHeight || 0;
@@ -194,11 +211,11 @@ export function createGrid({ container: initialContainer = null, onAction }) {
       container.textContent = '';
       itemsById = new Map(items.map((item) => [item.id, item]));
 
-      for (let index = 0; index < items.length; index += 1) {
+      // 每一轮只挂一批，区间由 batchRanges 保证不重叠——这是「卡片数 == 条目数」的关键。
+      for (const [start, end] of batchRanges(items.length, BATCH_SIZE)) {
         if (current !== token) return; // 渲染被新的 render 取代
-        const slice = items.slice(index, index + BATCH_SIZE);
         const fragment = document.createDocumentFragment();
-        for (const item of slice) fragment.appendChild(buildCard(item));
+        for (let index = start; index < end; index += 1) fragment.appendChild(buildCard(items[index]));
         container.appendChild(fragment);
         // eslint-disable-next-line no-await-in-loop
         await new Promise((resolve) => requestAnimationFrame(() => resolve()));

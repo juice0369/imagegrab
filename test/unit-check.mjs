@@ -49,6 +49,7 @@ const constants = await load('src/shared/constants.js');
 const urlUtils = await load('src/shared/url-utils.js');
 const platformRules = await load('src/content/platform-rules.js');
 const imageFilter = await load('src/content/image-filter.js');
+const grid = await load('src/results/grid.js');
 // 过滤逻辑会打日志，自检时关掉以免淹没断言结果
 const { setLogEnabled } = await load('src/shared/logger.js');
 setLogEnabled(false);
@@ -403,7 +404,32 @@ eq('已知错误码翻译', constants.describeError('IMG_LOAD_FAILED'), constant
 ok('未知错误码带原文', constants.describeError('SOMETHING_ELSE').includes('SOMETHING_ELSE'));
 eq('空错误码的兜底文案', constants.describeError(''), constants.ERROR_CODES.UNKNOWN);
 
-/* ─────────────────────────── 9. 配置自检 ─────────────────────────── */
+/* ─────────────────── 9. 结果页分片渲染（batchRanges） ─────────────────── */
+
+group('结果页分片渲染 batchRanges');
+eq('不足一批时只有一段', JSON.stringify(grid.batchRanges(16, 60)), JSON.stringify([[0, 16]]));
+eq('正好一批', JSON.stringify(grid.batchRanges(60, 60)), JSON.stringify([[0, 60]]));
+eq('多批带余数', JSON.stringify(grid.batchRanges(150, 60)), JSON.stringify([[0, 60], [60, 120], [120, 150]]));
+eq('空列表没有分段', grid.batchRanges(0, 60).length, 0);
+eq('非法的批大小兜底为 1', JSON.stringify(grid.batchRanges(3, 0)), JSON.stringify([[0, 1], [1, 2], [2, 3]]));
+
+// 这是「59 张图在结果页里变成上千张卡片」那个缺陷的回归断言：
+// 分段必须互不重叠、不留空洞，且每个下标恰好出现一次。
+for (const [total, size] of [[1, 60], [59, 60], [61, 60], [500, 60], [7, 3], [2, 1]]) {
+  const ranges = grid.batchRanges(total, size);
+  const covered = [];
+  for (const [start, end] of ranges) for (let index = start; index < end; index += 1) covered.push(index);
+  eq(`${total} 条 / 每批 ${size}：覆盖次数等于条目数`, covered.length, total);
+  eq(`${total} 条 / 每批 ${size}：没有下标被重复挂载`, new Set(covered).size, total);
+  eq(
+    `${total} 条 / 每批 ${size}：顺序从 0 连续到 ${total - 1}`,
+    covered.join(','),
+    Array.from({ length: total }, (_, index) => index).join(',')
+  );
+  ok(`${total} 条 / 每批 ${size}：每段不超过批大小且非空`, ranges.every(([start, end]) => end > start && end - start <= size));
+}
+
+/* ─────────────────────────── 10. 配置自检 ─────────────────────────── */
 
 group('配置自检');
 eq('文件名零填充位数', constants.DEFAULT_SETTINGS.filenamePad, 3);
