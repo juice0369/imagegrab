@@ -224,6 +224,31 @@ for (const [label, variant] of dupVariants) {
   eq(`淘宝重复写法归并（${label}）`, urlUtils.makeDedupeKey(urlUtils.restoreOriginalUrl(variant, aliRules)), dupBaseKey);
 }
 
+// 用户上报的真实案例：同一张商品图在阿里 CDN 上有两条等价入口路径。
+// `/bao/uploaded/` 与 `/imgextra/` 是同一文件的两种容器路径，必须归并成一条。
+const aliImgextra = 'https://img.alicdn.com/imgextra/i2/2221069160645/O1CN01qwZiH0MMQIJ1chua_!!2221069160645.jpg';
+const aliBaoUploaded = 'https://gw.alicdn.com/bao/uploaded/i2/2221069160645/O1CN01qwZiH0MMQIJ1chua_!!2221069160645.jpg';
+eq(
+  'imgextra 与 bao/uploaded 是同一张图',
+  urlUtils.makeDedupeKey(aliBaoUploaded),
+  urlUtils.makeDedupeKey(aliImgextra)
+);
+eq(
+  '两种入口 + 缩略图后缀 + 埋点仍然归并',
+  urlUtils.makeDedupeKey(urlUtils.restoreOriginalUrl(`${aliBaoUploaded}_400x400.jpg?spm=a1z10.3-b.w4011-1234.56`, aliRules)),
+  urlUtils.makeDedupeKey(aliImgextra)
+);
+notEq(
+  '换一个文件名仍然算两张（不能过度合并）',
+  urlUtils.makeDedupeKey('https://gw.alicdn.com/bao/uploaded/i2/2221069160645/O1CN01qwZiH0MMQIJ1chua_!!2221069160645.jpg'),
+  urlUtils.makeDedupeKey('https://gw.alicdn.com/bao/uploaded/i2/2221069160645/O1CN01qwZiH0MMQIJ1chuB_!!2221069160645.jpg')
+);
+notEq(
+  '换一个卖家目录仍然算两张',
+  urlUtils.makeDedupeKey('https://img.alicdn.com/imgextra/i2/2221069160645/x_!!2221069160645.jpg'),
+  urlUtils.makeDedupeKey('https://img.alicdn.com/imgextra/i2/2221069160646/x_!!2221069160646.jpg')
+);
+
 // 反向：真的不同的图绝不能被合并。归一化只针对已知 CDN 与已知埋点参数。
 notEq(
   '不同文件名不归并',

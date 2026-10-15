@@ -78,29 +78,48 @@ export const TRACKING_QUERY_RE = [
 ];
 
 /**
- * 同一张图经常由同一 CDN 的**不同子域**返回（img. / gw. / cbu01. / gju…）。
- * 这些 CDN 的资源路径本身就能唯一确定一张图，所以去重键里把子域与协议一并归一，
- * 否则同一张图会因为「img.alicdn.com」和「gw.alicdn.com」被算成两张。
+ * 阿里系 CDN 的「容器路径」别名。
  *
- * 只归一「已知图片 CDN」，不做通用的跨域合并——不同站点上的同名路径
- * 完全可能是两张不同的图（例如 localhost 与 127.0.0.1）。
+ * 同一个文件在阿里 CDN 上有多条等价路径，最典型的是商品图同时以这两种形式出现：
+ *   https://img.alicdn.com/imgextra/i2/<uid>/O1CN01xxx.jpg
+ *   https://gw.alicdn.com/bao/uploaded/i2/<uid>/O1CN01xxx.jpg
+ * 两者是同一张图，只是走了不同的 CDN 入口。这里把容器段统一去掉，
+ * 只留下真正标识资源的 `iN/<uid>/<文件名>`，否则同一张图会在结果页里出现两次。
+ *
+ * 只在阿里系 CDN 上启用（见 CDN_RULES），不会作用于普通站点。
  */
-export const CDN_ORIGIN_ALIASES = [
-  [/^(?:[\w-]+\.)*alicdn\.com$/i, 'cdn:alicdn.com'],
-  [/^(?:[\w-]+\.)*taobaocdn\.com$/i, 'cdn:taobaocdn.com'],
-  [/^(?:[\w-]+\.)*tbcdn\.cn$/i, 'cdn:tbcdn.cn'],
-  [/^(?:[\w-]+\.)*360buyimg\.com$/i, 'cdn:360buyimg.com'],
-  [/^(?:[\w-]+\.)*pddpic\.com$/i, 'cdn:pddpic.com']
+export const ALI_PATH_CONTAINER_RE = /\/(?:bao\/uploaded|imgextra|img\/ibank|kf)\//gi;
+
+/**
+ * 已知图片 CDN 的归一化规则：
+ *  - host：主机名正则（含各子域）
+ *  - key：归一后的主机标识（同时抹掉 http/https 差异）
+ *  - pathAlias：可选的路径别名正则，用于抹掉同一 CDN 的等价容器路径
+ *
+ * 只归一「已知图片 CDN」。不同站点上的同名路径完全可能是两张不同的图
+ * （例如 localhost 与 127.0.0.1），所以不做通用的跨域 / 跨路径合并。
+ */
+export const CDN_RULES = [
+  { host: /^(?:[\w-]+\.)*alicdn\.com$/i, key: 'cdn:alicdn.com', pathAlias: ALI_PATH_CONTAINER_RE },
+  { host: /^(?:[\w-]+\.)*taobaocdn\.com$/i, key: 'cdn:taobaocdn.com', pathAlias: ALI_PATH_CONTAINER_RE },
+  { host: /^(?:[\w-]+\.)*tbcdn\.cn$/i, key: 'cdn:tbcdn.cn', pathAlias: ALI_PATH_CONTAINER_RE },
+  { host: /^(?:[\w-]+\.)*360buyimg\.com$/i, key: 'cdn:360buyimg.com' },
+  { host: /^(?:[\w-]+\.)*pddpic\.com$/i, key: 'cdn:pddpic.com' }
 ];
 
-/** 把已知图片 CDN 的主机名归一到统一写法（同时抹掉 http/https 差异）；其它主机原样返回。 */
-function canonicalOrigin(origin) {
+/**
+ * 归一「主机名 + 路径」。
+ * 命中已知 CDN 时返回归一后的主机标识与路径；否则原样返回（只规范化斜杠）。
+ */
+function canonicalize(origin, path) {
   const separator = origin.indexOf('://');
   const host = separator >= 0 ? origin.slice(separator + 3) : origin;
-  for (const [pattern, canonical] of CDN_ORIGIN_ALIASES) {
-    if (pattern.test(host)) return canonical;
+  for (const rule of CDN_RULES) {
+    if (!rule.host.test(host)) continue;
+    const normalizedPath = rule.pathAlias ? path.replace(rule.pathAlias, '/') : path;
+    return { origin: rule.key, path: normalizedPath.replace(/\/{2,}/g, '/') };
   }
-  return origin;
+  return { origin, path };
 }
 
 /** 按平台给出的原图还原规则。平台改版时只需要动这里。 */
@@ -201,7 +220,7 @@ function stripTrackingParams(tail) {
 }
 
 /**
- * 生成去重键：忽略缩放参数、埋点/缓存参数、hash、CDN 子域与大小写差异。
+ * 生成去重键：忽略缩放参数、埋点/缓存参数、hash、CDN 子域与等价容器路径、大小写差异。
  *
  * 让哪些 URL 视为「同一张图」完全由这个函数决定，所以它是重复条目的唯一关口。
  */
@@ -210,8 +229,8 @@ export function makeDedupeKey(url) {
   if (url.startsWith('data:')) return `data:${url.length}:${url.slice(0, 96)}`;
   const match = /^(https?:\/\/[^/?#]+)([^?#]*)([\s\S]*)$/i.exec(url);
   if (!match) return url;
-  const origin = canonicalOrigin(match[1].toLowerCase());
-  const path = (match[2] || '/').replace(/\/{2,}/g, '/').replace(/\/+$/, '') || '/';
+  const rawPath = (match[2] || '/').replace(/\/{2,}/g, '/').replace(/\/+$/, '') || '/';
+  const { origin, path } = canonicalize(match[1].toLowerCase(), rawPath);
   let tail = match[3] || '';
   // 先丢缩放 / 水印这类真的「改变输出」的转换参数，再丢埋点与缓存刷新参数
   tail = filterQueryParams(tail, PDD_QUERY_BLOCKLIST);

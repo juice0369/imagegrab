@@ -195,7 +195,9 @@ node tools/make-assets.mjs
 提取结果只存在于当前浏览器会话。浏览器重启、扩展重载、关闭结果页、超过 2 小时都会清理，请回到商品页重新提取。
 
 **结果页里同一张图出现了好几次**
-去重键会忽略尺寸后缀、埋点参数（`spm`、`ali_trackid`、`utm_*`）、缓存刷新参数（`t`、`_`）以及同一图片 CDN 的不同子域（`img.` / `gw.` / `cbu01.`），这几类都算同一张图。真正会被当成两张的是**同一路径挂了你没见过的参数**（例如 `?variant=1` 与 `?variant=2`）——这类参数无法判断是否影响图片内容，所以保守地按不同图处理，避免把两张不同的图合并掉。
+去重键会忽略这些东西：尺寸后缀（`_400x400.jpg`、`_.webp`）、埋点参数（`spm`、`ali_trackid`、`utm_*`）、缓存刷新参数（`t`、`_`）、同一图片 CDN 的不同子域（`img.` / `gw.` / `cbu01.`），以及阿里 CDN 的等价容器路径——`img.alicdn.com/**imgextra**/i2/…` 与 `gw.alicdn.com/**bao/uploaded**/i2/…` 是同一个文件的两种入口，会合并成一条。这几类都算同一张图。
+
+真正会被当成两张的是**同一路径挂了你没见过的参数**（例如 `?variant=1` 与 `?variant=2`），或者文件名 / 卖家目录不同。这类情况无法判断是否影响图片内容，所以保守地按不同图处理，避免把两张不同的图合并掉。
 
 **下载出来的图片比网页上看到的小**
 说明该条是从缩略图地址还原的原图，但原图地址已失效，于是回退下载了页面上的实际地址。卡片上的「原格式」标记和尺寸标注会反映最终结果。
@@ -210,7 +212,7 @@ Service Worker 被浏览器回收导致任务中断。刷新结果页后点「�
 
 - 关键逻辑与每个导出函数都有中文注释；
 - 所有阈值、上限、消息类型、错误文案集中在 [src/shared/constants.js](src/shared/constants.js)；
-- 平台差异集中在 [src/content/platform-rules.js](src/content/platform-rules.js) 与原图还原规则（`src/shared/url-utils.js` 的 `ALI_RESIZE_SUFFIX_PATTERNS` / `JD_PATH_REPLACERS` / `PDD_QUERY_BLOCKLIST`）；
+- 平台差异集中在 [src/content/platform-rules.js](src/content/platform-rules.js) 与原图还原规则（`src/shared/url-utils.js` 的 `ALI_RESIZE_SUFFIX_PATTERNS` / `JD_PATH_REPLACERS` / `PDD_QUERY_BLOCKLIST`）；「哪两个地址算同一张图」集中在 `src/shared/url-utils.js` 的 `makeDedupeKey`（含 `TRACKING_QUERY_RE` 与 `CDN_RULES`）；
 - 内容脚本侧全为 ES Module：声明式 content script 不支持 ESM，因此 [src/content/content-script.js](src/content/content-script.js) 只是一个 classic 引导脚本，用 `import()` 动态加载 `ui-panel.js`（新增 `src/content/` / `src/shared/` 下的模块无需改清单，通配符已覆盖；新增**其它目录**的模块才需要加进 `web_accessible_resources`）；
 - 改动后请跑一遍 `node test/unit-check.mjs` 与 `node tools/check-syntax.mjs`。
 
