@@ -15,10 +15,25 @@ import {
   describeError
 } from '../shared/constants.js';
 import { createLogger } from '../shared/logger.js';
+import { isContextInvalidated, isExtensionAlive } from '../shared/messaging.js';
 import { sessionStore } from '../background/session-store.js';
 import { createGrid } from './grid.js';
 
 const log = createLogger('results');
+
+/** 扩展被重新加载后，本页的旧代码再也连不上后台；唯一出路是刷新本页。 */
+const CONTEXT_DEAD_TEXT = describeError('CONTEXT_INVALIDATED');
+
+/**
+ * 所有展示给用户的失败文案都必须走这里。
+ *
+ * chrome API 在上下文失效时抛的是英文原文（`Extension context invalidated.`），
+ * 直接往界面上贴等于什么都没说；换成 ERROR_CODES 里的中文提示，并明确指出要刷新本页。
+ */
+function describeFailure(err) {
+  if (isContextInvalidated(err)) return CONTEXT_DEAD_TEXT;
+  return err?.message || String(err || describeError(''));
+}
 
 const els = {};
 const state = {
@@ -48,6 +63,12 @@ const grid = createGrid({
 async function main() {
   cacheElements();
   grid.setContainer?.(els.grid);
+
+  // 扩展被重载过：storage.session 里的旧会话也已清空，直接用「请刷新本页」的界面代替一串英文报错
+  if (!isExtensionAlive()) {
+    showEmpty('reloaded');
+    return;
+  }
 
   const params = new URLSearchParams(location.search);
   state.sid = params.get('sid');
@@ -87,6 +108,7 @@ function cacheElements() {
     'progress-bar',
     'btn-source',
     'btn-reload',
+    'btn-refresh',
     'btn-select-all',
     'btn-invert',
     'btn-select-none',
@@ -132,8 +154,8 @@ function defaultSelection() {
 /* ───────────────────── 长连接（results ↔ SW） ───────────────────── */
 
 function connect() {
-  if (!chrome.runtime?.id) {
-    setNotice('error', '扩展已重新加载，请刷新本页后重试。');
+  if (!isExtensionAlive()) {
+    setNotice('error', CONTEXT_DEAD_TEXT);
     return;
   }
   let port;
@@ -149,8 +171,15 @@ function connect() {
   port.onMessage.addListener(onPortMessage);
   port.onDisconnect.addListener(() => {
     state.port = null;
-    for (const entry of state.pendingRequests.values()) entry.reject(new Error('与后台的连接已断开'));
+    // 断开的两种成因要分清：扩展被重载（只能刷新）与 SW 被回收（可以重连）
+    const dead = !isExtensionAlive();
+    const reason = dead ? CONTEXT_DEAD_TEXT : '与后台的连接已断开';
+    for (const entry of state.pendingRequests.values()) entry.reject(new Error(reason));
     state.pendingRequests.clear();
+    if (dead) {
+      setNotice('error', CONTEXT_DEAD_TEXT);
+      return;
+    }
     scheduleReconnect();
   });
 
@@ -158,13 +187,13 @@ function connect() {
 }
 
 function scheduleReconnect(cause) {
-  if (!chrome.runtime?.id) {
-    setNotice('error', '扩展已重新加载，请刷新本页后重试。');
+  if (!isExtensionAlive()) {
+    setNotice('error', CONTEXT_DEAD_TEXT);
     return;
   }
   if (state.reconnectTimer) return;
   if (state.reconnectAttempts >= 5) {
-    setNotice('error', '与后台的连接已断开（Service Worker 可能被回收）。请重新加载本页。');
+    setNotice('error', '与后台的连接已断开（Service Worker 可能被回收）。请刷新本页（F5）后重试。');
     return;
   }
   state.reconnectAttempts += 1;
@@ -590,6 +619,14 @@ function showEmpty(kind) {
     const code = document.createElement('code');
     code.textContent = '获取图片';
     paragraph.append(code, document.createTextNode(' 重新提取。'));
+  } else if (kind === 'reloaded') {
+    els['session-summary'].textContent = '扩展已重新加载';
+    title.textContent = '扩展已重新加载，本页已和扩展断开';
+    paragraph.append(
+      document.createTextNode(
+        '本页是在旧版本的扩展下打开的，已经没有权限读写扩展数据（浏览器把这种状态报成「扩展上下文已失效」）。扩展重载后这批会话数据也已清空，点右上角「刷新页面」重新加载本页；如果提示结果已失效，回到商品详情页重新点一次「获取图片」即可。'
+      )
+    );
   } else {
     els['session-summary'].textContent = '还没有提取记录';
     title.textContent = '还没有提取记录';
@@ -660,7 +697,7 @@ function wireUi() {
       const data = await request(PORT_CMD.RESUME, {});
       setNotice('ok', `已继续下载 ${data?.ids?.length ?? ''} 张未完成的图片。`);
     } catch (err) {
-      setNotice('error', `继续下载失败：${err.message}`);
+      setNotice('error', `继续下载失败：${describeFailure(err)}`);
     }
   });
 
@@ -669,7 +706,7 @@ function wireUi() {
       await request(PORT_CMD.CANCEL, {});
       setNotice('warn', '已取消：未开始的条目不再下载，已经开始的不打断（避免半截文件）。');
     } catch (err) {
-      setNotice('error', `取消失败：${err.message}`);
+      setNotice('error', `取消失败：${describeFailure(err)}`);
     }
   });
 
@@ -677,7 +714,7 @@ function wireUi() {
     try {
       await request(PORT_CMD.FOCUS_SOURCE, {});
     } catch (err) {
-      setNotice('error', `无法切到源页面：${err.message}`);
+      setNotice('error', `无法切到源页面：${describeFailure(err)}`);
     }
   });
 
@@ -687,9 +724,12 @@ function wireUi() {
     try {
       await request(PORT_CMD.REFRESH, {});
     } catch (err) {
-      setNotice('error', `重新读取失败：${err.message}`);
+      setNotice('error', `重新读取失败：${describeFailure(err)}`);
     }
   });
+
+  // 扩展被重新加载后本页的一切都失效，刷新是唯一的恢复手段，所以给它一个固定入口
+  els['btn-refresh'].addEventListener('click', () => location.reload());
 
   document.addEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
@@ -732,7 +772,7 @@ async function startDownload(ids) {
   try {
     await request(PORT_CMD.START_DOWNLOAD, { ids });
   } catch (err) {
-    setNotice('error', `下载任务没有启动：${err.message}`);
+    setNotice('error', `下载任务没有启动：${describeFailure(err)}`);
     setStatusline('任务未启动，可修改选择后重试。');
   }
 }
@@ -744,5 +784,10 @@ function truncate(text, max) {
 
 main().catch((err) => {
   log.error('结果页初始化失败', err);
-  setNotice('error', `结果页初始化失败：${err?.message || err}`);
+  // 扩展被重载导致的失败重试也没用，直接给出「刷新本页」的整页提示
+  if (isContextInvalidated(err)) {
+    showEmpty('reloaded');
+    return;
+  }
+  setNotice('error', `结果页初始化失败：${describeFailure(err)}`);
 });

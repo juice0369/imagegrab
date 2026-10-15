@@ -9,12 +9,23 @@
 (() => {
   const ENTRY = 'src/content/ui-panel.js';
   const boot = () => {
-    const url = chrome.runtime.getURL(ENTRY);
+    let url;
+    try {
+      url = chrome.runtime.getURL(ENTRY);
+    } catch (err) {
+      // 扩展在「脚本注入」与「这里执行」之间被重载/卸载：chrome.* 已经不可用。
+      // 浏览器抛的是英文原文（Extension context invalidated.），换成能照着做的中文提示。
+      console.warn(
+        '[ImageGrab] 扩展已被重新加载或停用，本页的面板无法注入。刷新页面即可恢复。',
+        err?.message || err
+      );
+      return;
+    }
     import(url)
       .then((mod) => mod.start())
       .catch((err) => {
         // 这里不能依赖 shared/logger（模块加载失败时就还没加载到）
-        console.error('[ImageGrab] content 模块加载失败：', err);
+        console.error('[ImageGrab] content 模块加载失败（检查 web_accessible_resources 是否覆盖该文件）：', err);
       });
   };
 

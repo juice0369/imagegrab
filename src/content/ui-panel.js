@@ -6,7 +6,7 @@
 
 import { MSG, DEFAULT_SETTINGS, STORAGE_KEYS, FILTER_REASONS, EXT } from '../shared/constants.js';
 import { createLogger } from '../shared/logger.js';
-import { sendMessage, isExtensionAlive, toError } from '../shared/messaging.js';
+import { sendMessage, isExtensionAlive, isContextInvalidated, toError } from '../shared/messaging.js';
 import { getPageState } from './platform-rules.js';
 import { scanPageImages } from './image-scanner.js';
 import { filterRecords, describeFilterStats } from './image-filter.js';
@@ -22,6 +22,8 @@ const state = {
   shadow: null,
   refs: {},
   busy: false,
+  /** 扩展被重新加载后为 true：页面里这份旧代码再也调不通后台，只能等用户刷新页面 */
+  dead: false,
   sid: null,
   platform: null,
   settings: { ...DEFAULT_SETTINGS },
@@ -41,6 +43,7 @@ export function start() {
   bindRuntimeListener();
   watchNavigation();
   watchDom();
+  watchLiveness();
   window.addEventListener('pagehide', onPageHide);
 
   loadSettings()
@@ -52,18 +55,59 @@ export function start() {
 
 /** SW 请求页面内 canvas 回退转换时，由这里应答。 */
 function bindRuntimeListener() {
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || message.type !== MSG.CONVERT_IN_PAGE) return undefined;
-    handleConvertInPageRequest(message)
-      .then(sendResponse)
-      .catch((err) =>
-        sendResponse({
-          ok: false,
-          code: err?.code || 'PAGE_CONVERT_FAILED',
-          message: err?.message || String(err)
-        })
-      );
-    return true; // 异步应答
+  try {
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (!message || message.type !== MSG.CONVERT_IN_PAGE) return undefined;
+      handleConvertInPageRequest(message)
+        .then(sendResponse)
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            code: err?.code || 'PAGE_CONVERT_FAILED',
+            message: err?.message || String(err)
+          })
+        );
+      return true; // 异步应答
+    });
+  } catch (err) {
+    // 上下文刚好在这之间失效（扩展被重载）：登记监听器已经没意义了
+    log.warn('注册消息监听失败，扩展上下文可能已失效', err);
+  }
+}
+
+/**
+ * 扩展被重新加载后，页面里这份旧代码会被「孤立」：chrome.runtime.id 变成 undefined，
+ * 之后任何 chrome.* 调用都会被拒绝（`Extension context invalidated.`）。
+ *
+ * 这种状态无法在页面内自愈 —— 唯一的出路是刷新页面让新脚本重新注入，
+ * 所以这里统一做两件事：把面板降到「不可用」的外观，并把处置办法明确告诉用户。
+ * 用户回到这个标签页时也会被动自检（见 watchLiveness），避免点下去才看到报错。
+ */
+function reportContextInvalidated({ showCard = true } = {}) {
+  const firstTime = !state.dead;
+  state.dead = true;
+  state.sid = null;
+  if (firstTime) log.warn('扩展已重新加载，本页的 content script 已失效，提示用户刷新页面');
+
+  setBusy(false);
+  const { fab } = state.refs;
+  if (fab) fab.title = '扩展已重新加载，刷新页面后即可继续使用';
+  if (!showCard) return;
+
+  setCard({
+    title: '扩展已重新加载',
+    text: '本页里运行的还是旧版本的扩展代码，已经无法访问扩展后台，所以这次提取没有送出。点右下角「刷新页面」重新加载本页，就能继续提取图片。',
+    tone: 'error',
+    showReload: true
+  });
+}
+
+/** 回到本标签页时自检一次：扩展被重载过的话，按钮上直接给出提示，不用等用户点下去才报错。 */
+function watchLiveness() {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!state.mounted) return;
+    if (!isExtensionAlive()) reportContextInvalidated({ showCard: false });
   });
 }
 
@@ -111,6 +155,11 @@ function onLocationChange() {
 function watchDom() {
   const observer = new MutationObserver(() => {
     if (!state.mounted) return;
+    // 上下文失效后重新挂载毫无意义（图标、样式都加载不出来），先如实反映状态
+    if (!isExtensionAlive()) {
+      reportContextInvalidated({ showCard: false });
+      return;
+    }
     if (!state.host || !state.host.isConnected) {
       mount();
     }
@@ -121,6 +170,8 @@ function watchDom() {
 
 function syncPanel(reason) {
   if (!isExtensionAlive()) {
+    // 已经提示过「需刷新页面」就保留面板，别让处置办法无缘无故消失（SPA 路由切换时会走到这里）
+    if (state.dead) return;
     teardown();
     return;
   }
@@ -136,6 +187,7 @@ function syncPanel(reason) {
 }
 
 async function loadSettings() {
+  if (!isExtensionAlive()) return;
   try {
     const data = await chrome.storage.local.get([STORAGE_KEYS.settings, STORAGE_KEYS.panelPos]);
     state.settings = { ...DEFAULT_SETTINGS, ...(data[STORAGE_KEYS.settings] || {}) };
@@ -147,6 +199,7 @@ async function loadSettings() {
 
 async function saveSettings(patch) {
   state.settings = { ...state.settings, ...patch };
+  if (!isExtensionAlive()) return;
   try {
     await chrome.storage.local.set({ [STORAGE_KEYS.settings]: state.settings });
   } catch (err) {
@@ -181,6 +234,7 @@ const TEMPLATE = `
       <div class="ig-actions">
         <button class="ig-btn ig-btn-primary" data-action="open" hidden type="button">打开结果页</button>
         <button class="ig-btn" data-action="retry" hidden type="button">重新提取</button>
+        <button class="ig-btn" data-action="reload" hidden type="button">刷新页面</button>
       </div>
     </section>
   </div>
@@ -188,6 +242,8 @@ const TEMPLATE = `
 
 function mount() {
   if (state.mounted && state.host?.isConnected) return;
+  // 上下文失效时挂载出来的面板连样式都取不到（panel.css 走 chrome-extension:// 地址）
+  if (!isExtensionAlive()) return;
 
   let host = document.getElementById(HOST_ID);
   if (!host) {
@@ -220,6 +276,7 @@ function mount() {
     autoscroll: shadow.querySelector('.ig-autoscroll'),
     btnOpen: shadow.querySelector('[data-action="open"]'),
     btnRetry: shadow.querySelector('[data-action="retry"]'),
+    btnReload: shadow.querySelector('[data-action="reload"]'),
     btnClose: shadow.querySelector('.ig-close')
   };
 
@@ -239,6 +296,7 @@ function mount() {
   });
   state.refs.btnOpen.addEventListener('click', openResultsPage);
   state.refs.btnRetry.addEventListener('click', () => runExtraction());
+  state.refs.btnReload.addEventListener('click', () => location.reload());
   state.refs.btnClose.addEventListener('click', () => hideCard());
   attachDrag();
 
@@ -332,9 +390,12 @@ function attachDrag() {
     }, 120);
     const rect = root.getBoundingClientRect();
     state.position = { left: Math.round(rect.left), top: Math.round(rect.top) };
-    chrome.storage.local
-      .set({ [STORAGE_KEYS.panelPos]: state.position })
-      .catch(() => {});
+    // 位置只是体验优化：上下文失效（扩展被重载）时静默放弃，不要抛到页面控制台
+    try {
+      chrome.storage.local.set({ [STORAGE_KEYS.panelPos]: state.position }).catch(() => {});
+    } catch {
+      /* 忽略 */
+    }
   };
 
   fab.addEventListener('pointerup', endDrag);
@@ -358,17 +419,18 @@ function setBusy(busy) {
   if (!fab) return;
   fab.disabled = busy;
   spinner.hidden = !busy;
-  fabLabel.textContent = busy ? '处理中…' : '获取图片';
+  // 上下文失效后按钮标签必须一直是「需刷新页面」：这里收口，避免其它路径把它改回「获取图片」
+  fabLabel.textContent = state.dead ? '需刷新页面' : busy ? '处理中…' : '获取图片';
 }
 
 /**
  * 更新状态卡片。
  * @param {{title?: string, text?: string, tone?: 'info'|'ok'|'warn'|'error',
- *   progress?: number|null, showOpen?: boolean, showRetry?: boolean,
+ *   progress?: number|null, showOpen?: boolean, showRetry?: boolean, showReload?: boolean,
  *   details?: Array<[string, string]>|null}} options
  */
 function setCard(options = {}) {
-  const { card, title, text, bar, barInner, btnOpen, btnRetry, details, detailsList } = state.refs;
+  const { card, title, text, bar, barInner, btnOpen, btnRetry, btnReload, details, detailsList } = state.refs;
   if (!card) return;
   if (options.hide) {
     card.hidden = true;
@@ -386,6 +448,7 @@ function setCard(options = {}) {
   }
   btnOpen.hidden = !options.showOpen;
   btnRetry.hidden = !options.showRetry;
+  btnReload.hidden = !options.showReload;
   if (options.details && options.details.length) {
     details.hidden = false;
     detailsList.textContent = '';
@@ -409,6 +472,11 @@ function hideCard() {
 
 async function runExtraction() {
   if (state.busy) return;
+  // 扩展被重载过：连扫描都不用做（结果送不出去），直接把处置办法给出来
+  if (state.dead || !isExtensionAlive()) {
+    reportContextInvalidated();
+    return;
+  }
   setBusy(true);
   setCard({ title: '正在扫描图片…', text: '准备扫描页面…', tone: 'info', progress: 0.02, showRetry: false, showOpen: false });
 
@@ -489,10 +557,16 @@ async function runExtraction() {
     log.info(`提取完成：${items.length} 张`, stats);
   } catch (err) {
     const error = toError(err);
+    // 扫描是纯本地操作，失败一般发生在「上报后台」这一步：扩展刚被重载时就是这样
+    if (isContextInvalidated(error)) {
+      log.error('提取失败：扩展上下文已失效', error);
+      reportContextInvalidated();
+      return;
+    }
     log.error('提取失败', error);
     setCard({
       title: '提取失败',
-      text: `${error.message}${error.code === 'CONTEXT_INVALIDATED' ? '' : '（可点击「重新提取」重试）'}`,
+      text: `${error.message}（可点击「重新提取」重试）`,
       tone: 'error',
       showRetry: true
     });
@@ -515,6 +589,10 @@ function createSid() {
 
 function openResultsPage() {
   if (!state.sid) return;
+  if (!isExtensionAlive()) {
+    reportContextInvalidated();
+    return;
+  }
   // content script 里没有 chrome.tabs，开标签页必须交给 service worker 代劳。
   // 后台还会在结果页已打开时复用那个标签，避免同一个会话堆出多个标签。
   sendMessage({ type: MSG.OPEN_RESULTS, payload: { sid: state.sid } }, { timeoutMs: 10000 })
@@ -525,6 +603,10 @@ function openResultsPage() {
     })
     .catch((err) => {
       const error = toError(err);
+      if (isContextInvalidated(error)) {
+        reportContextInvalidated();
+        return;
+      }
       log.error('打开结果页失败', error);
       setCard({
         title: '打开结果页失败',

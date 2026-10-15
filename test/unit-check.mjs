@@ -47,6 +47,7 @@ const load = (relative) => import(pathToFileURL(path.join(tmpRoot, relative)).hr
 
 const constants = await load('src/shared/constants.js');
 const urlUtils = await load('src/shared/url-utils.js');
+const messaging = await load('src/shared/messaging.js');
 const platformRules = await load('src/content/platform-rules.js');
 const imageFilter = await load('src/content/image-filter.js');
 const grid = await load('src/results/grid.js');
@@ -82,6 +83,23 @@ function notEq(label, actual, unexpected) {
     return;
   }
   failures.push(`${currentGroup} › ${label}\n      不应等于：${JSON.stringify(unexpected)}`);
+}
+
+/** 断言 Promise 一定失败（可选：指定期望的错误码）。 */
+async function rejects(label, promise, code) {
+  try {
+    await promise;
+  } catch (err) {
+    if (code === undefined || err?.code === code) {
+      passed += 1;
+      return;
+    }
+    failures.push(
+      `${currentGroup} › ${label}\n      期望错误码：${JSON.stringify(code)}\n      实际错误码：${JSON.stringify(err?.code)}`
+    );
+    return;
+  }
+  failures.push(`${currentGroup} › ${label}\n      期望：失败\n      实际：成功返回`);
 }
 
 /* ─────────────────────────── 1. 地址补全 ─────────────────────────── */
@@ -429,7 +447,40 @@ for (const [total, size] of [[1, 60], [59, 60], [61, 60], [500, 60], [7, 3], [2,
   ok(`${total} 条 / 每批 ${size}：每段不超过批大小且非空`, ranges.every(([start, end]) => end > start && end - start <= size));
 }
 
-/* ─────────────────────────── 10. 配置自检 ─────────────────────────── */
+/* ─────────────── 11. 上下文失效（Extension context invalidated） ─────────────── */
+
+group('上下文失效');
+// Node 里没有 chrome API，正好等价于「扩展被重载后 content script 里的 runtime.id 没了」
+eq('没有 chrome API 时视为上下文不存在', messaging.isExtensionAlive(), false);
+
+const rawEnglish = new Error('Extension context invalidated.');
+eq('认识浏览器抛的英文原文', messaging.isContextInvalidated(rawEnglish), true);
+eq('认识 CONTEXT_INVALIDATED 错误码', messaging.isContextInvalidated({ code: 'CONTEXT_INVALIDATED' }), true);
+eq('普通错误不算上下文失效', messaging.isContextInvalidated(new Error('网络错误')), false);
+eq('空值不算上下文失效', messaging.isContextInvalidated(null), false);
+eq('字符串错误也算', messaging.isContextInvalidated(new Error('Uncaught Error: Extension context invalidated.')), true);
+
+// 这是用户实际看到的那条报错：必须换成中文，并且明确告诉用户要刷新页面。
+const normalized = messaging.toError(rawEnglish, 'MESSAGE_FAILED');
+eq('英文原文被归一为 CONTEXT_INVALIDATED', normalized.code, 'CONTEXT_INVALIDATED');
+eq('展示文案换成 ERROR_CODES 的中文', normalized.message, constants.ERROR_CODES.CONTEXT_INVALIDATED);
+eq('界面里不再出现英文原文', normalized.message.includes('invalidated'), false);
+eq('中文文案包含可执行的下一步', normalized.message.includes('刷新页面'), true);
+
+await rejects('上下文失效时 sendMessage 立刻失败', messaging.sendMessage({ type: 'IG_DIAGNOSTICS' }), 'CONTEXT_INVALIDATED');
+await rejects('上下文失效时 sendTabMessage 立刻失败', messaging.sendTabMessage(1, { type: 'X' }), 'CONTEXT_INVALIDATED');
+const deadError = await messaging.sendMessage({ type: 'X' }).catch((err) => err);
+eq('失败信息可以直接贴到界面上', deadError.message, constants.ERROR_CODES.CONTEXT_INVALIDATED);
+
+// 同类问题：chrome 的另外两句运行时错误原文也不该出现在界面上
+const noReceiver = messaging.toError(new Error('Could not establish connection. Receiving end does not exist.'), 'NO_RESPONSE');
+eq('后台未响应的英文原文换成中文', noReceiver.message, constants.ERROR_CODES.NO_RESPONSE);
+const portClosed = messaging.toError(new Error('The message port closed before a response was received.'), 'MESSAGE_FAILED');
+eq('端口提前关闭的英文原文换成中文', portClosed.message, constants.ERROR_CODES.MESSAGE_FAILED);
+const ownMessage = messaging.toError(new Error('图片加载失败（404、防盗链或需要登录）'), 'IMG_LOAD_FAILED');
+eq('自己写的中文文案不会被覆盖', ownMessage.message, '图片加载失败（404、防盗链或需要登录）');
+
+/* ─────────────────────────── 12. 配置自检 ─────────────────────────── */
 
 group('配置自检');
 eq('文件名零填充位数', constants.DEFAULT_SETTINGS.filenamePad, 3);

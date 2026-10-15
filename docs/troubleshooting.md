@@ -85,6 +85,30 @@ await ImageGrabDebug.destroy(sid) // 手工回收某个会话
 
 回到商品页重新提取即可。相关阈值见 `src/shared/constants.js` 的 `SESSION_LIMITS`。
 
+## 6.1 面板 / 结果页提示「扩展已重新加载」（原文 `Extension context invalidated.`）
+
+**现象**：点「获取图片」后卡片显示这句英文，或者结果页整页提示「扩展已重新加载，本页已和扩展断开」。
+
+**成因**：这句话是浏览器抛的，不是本扩展的文案。扩展一旦被重载或更新，已经打开的页面里那份旧代码就被**孤立**了——`chrome.runtime.id` 变成 `undefined`，之后任何 `chrome.*` 调用都会被拒绝。旧代码无法在页面内自愈，唯一的出路是刷新页面让新脚本重新注入。
+
+**触发场景**：在 `chrome://extensions` 点了「重新加载」，然后没有刷新商品页就直接点按钮；或者扩展在后台自动更新，而结果页一直开着。
+
+**处理**：
+
+1. 面板上的按钮会变成「需刷新页面」，卡片里给了「刷新页面」按钮，点一下就恢复；
+2. 结果页右上角有「刷新页面」按钮；
+3. 注意刷新后会话数据通常已随重载被清空，若提示「提取结果已失效」，回商品页重新提取。
+
+**修复方式（避免再次露出英文原文）**：
+
+| 位置 | 做法 |
+| --- | --- |
+| `src/shared/messaging.js` | `isExtensionAlive()` / `isContextInvalidated()` / `createContextInvalidatedError()`；`toError()` 会把 `CONTEXT_INVALIDATED` 的错误信息统一换成 `ERROR_CODES.CONTEXT_INVALIDATED` 的中文文案 |
+| `src/content/ui-panel.js` | `reportContextInvalidated()`：按钮切到「需刷新页面」并给出「刷新页面」按钮；`visibilitychange` 时被动自检，回到标签页就能看到提示，而不是点下去才报错 |
+| `src/results/results.js` | `describeFailure()` 统一出口；上下文失效时直接进 `showEmpty('reloaded')`，不再显示英文报错 |
+
+排查时若又看到裸的 `Extension context invalidated.`，说明有一处新加的 UI 文案没走 `describeError()` / `describeFailure()`，补上即可。相关断言见 `test/unit-check.mjs` 的「上下文失效」分组。
+
 ## 7. 单张图片下载失败
 
 结果页卡片上会显示错误码对应的中文文案（原文见 `src/shared/constants.js` 的 `ERROR_CODES`，界面统一走 `describeError()`）。
