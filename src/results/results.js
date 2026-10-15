@@ -570,6 +570,18 @@ function runningJob() {
   return state.job && state.job.status === JOB_STATUS.RUNNING ? state.job : null;
 }
 
+/**
+ * 「还没处理完」的条目数：既没成功、也不是原格式降级过的。
+ *
+ * 这个口径必须和后台 RESUME 用的 `pendingItemIds()`（service-worker.js）一致，
+ * 否则按钮会时有时无：后台愿意重跑的是「未完成 + 已取消 + 失败」，
+ * 界面却只看 pending —— 点过一次「取消任务」之后，剩下的条目全都变成 cancelled，
+ * pending 归零，按钮就此消失，用户再也没法继续下载。
+ */
+function unfinishedCount(counts = countStatuses()) {
+  return counts.pending + counts.cancelled + counts.failed;
+}
+
 function countStatuses() {
   // 只统计「可下载」的条目：被过滤的卡片默认不参与下载，混进来会让进度与「继续下载」的数字失真
   const kept = downloadableImages();
@@ -597,9 +609,17 @@ function updateRunbar() {
   const job = runningJob();
   const counts = countStatuses();
   const processed = counts.done + counts.fallback + counts.failed + counts.cancelled;
+  const unfinished = unfinishedCount(counts);
+  /**
+   * 没跑过任何一批任务时不给「继续下载」。
+   *
+   * 那时它和「下载选中」是同一件事（默认勾选就等于全部未下载的条目），
+   * 两个按钮都亮着反而让人以为之前有什么任务被中断了。
+   */
+  const canResume = !job && Boolean(state.job) && unfinished > 0;
 
   els['btn-cancel'].hidden = !job;
-  els['btn-resume'].hidden = Boolean(job) || counts.pending === 0;
+  els['btn-resume'].hidden = !canResume;
 
   if (job) {
     els['progress-wrap'].hidden = false;
@@ -614,7 +634,16 @@ function updateRunbar() {
 
   if (state.job && state.job.status === JOB_STATUS.INTERRUPTED) {
     els['progress-wrap'].hidden = true;
-    setStatusline(`上次任务被中断（Service Worker 被回收或浏览器关闭）。还有 ${counts.pending} 张没处理，可以点「继续下载」。`);
+    setStatusline(`上次任务被中断（Service Worker 被回收或浏览器关闭）。还有 ${unfinished} 张没处理，可以点「继续下载」。`);
+    return;
+  }
+
+  if (state.job && state.job.status === JOB_STATUS.CANCELLED) {
+    els['progress-wrap'].hidden = true;
+    setStatusline(
+      `任务已取消（已完成 ${counts.done} · 原格式 ${counts.fallback} · 失败 ${counts.failed} · 已取消 ${counts.cancelled}）。` +
+        (unfinished ? `还有 ${unfinished} 张没处理，可以点「继续下载」。` : '')
+    );
     return;
   }
 
@@ -635,7 +664,8 @@ function updateRunbar() {
   }
   setStatusline(
     `已完成 ${counts.done} · 原格式 ${counts.fallback} · 失败 ${counts.failed}` +
-      `${counts.cancelled ? ` · 已取消 ${counts.cancelled}` : ''}${counts.pending ? ` · 待处理 ${counts.pending}` : ''}`
+      `${counts.cancelled ? ` · 已取消 ${counts.cancelled}` : ''}${counts.pending ? ` · 待处理 ${counts.pending}` : ''}` +
+      `${canResume ? '（点「继续下载」会重跑这些没完成的条目）' : ''}`
   );
 }
 
@@ -684,6 +714,9 @@ function renderNoticeForSummary(summary) {
       .join('；');
     text += ` 失败原因：${detail}`;
   }
+  // 有没跑完的条目就顺手说清楚「继续下载」在哪：取消任务之后最容易卡在这里
+  const unfinished = unfinishedCount(counts);
+  if (state.job && unfinished) text += ` 还有 ${unfinished} 张没完成，点「继续下载」可以重跑。`;
 
   setNotice(groups.size ? 'warn' : 'ok', text);
   log.info('批量任务结束', summary);
@@ -812,7 +845,7 @@ function wireUi() {
   els['btn-cancel'].addEventListener('click', async () => {
     try {
       await request(PORT_CMD.CANCEL, {});
-      setNotice('warn', '已取消：未开始的条目不再下载，已经开始的不打断（避免半截文件）。');
+      setNotice('warn', '已取消：未开始的条目标为「已取消」，已经开始的不打断（避免半截文件）。点「继续下载」可以接着下这些没完成的。');
     } catch (err) {
       setNotice('error', `取消失败：${describeFailure(err)}`);
     }

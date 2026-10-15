@@ -103,12 +103,14 @@ await ImageGrabDebug.destroy(sid) // 手工回收某个会话
 2. 结果页右上角有「刷新页面」按钮；
 3. 注意刷新后会话数据通常已随重载被清空，若提示「提取结果已失效」，回商品页重新提取。
 
+**控制台里会看到什么**：这条提示打在**页面自己的 Console**（例如 www.taobao.com），不是扩展的 Service Worker 控制台 —— 内容脚本的日志按设计就落在宿主页面里。被动自检（切回标签页、页面被重绘）只记一条 `debug`，因为那不是用户操作失败；只有你点了「获取图片」/「打开结果页」才发现失效时，才记一条 `warn`（`扩展已重新加载，本页的 content script 已失效，需要刷新页面后重试`），那才是排障要看的一条。两档各记一次，不会刷屏。
+
 **修复方式（避免再次露出英文原文）**：
 
 | 位置 | 做法 |
 | --- | --- |
 | `src/shared/messaging.js` | `isExtensionAlive()` / `isContextInvalidated()` / `createContextInvalidatedError()`；`toError()` 会把 `CONTEXT_INVALIDATED` 的错误信息统一换成 `ERROR_CODES.CONTEXT_INVALIDATED` 的中文文案 |
-| `src/content/ui-panel.js` | `reportContextInvalidated()`：按钮切到「需刷新页面」并给出「刷新页面」按钮；`visibilitychange` 时被动自检，回到标签页就能看到提示，而不是点下去才报错 |
+| `src/content/ui-panel.js` | `reportContextInvalidated({ showCard, passive })`：按钮切到「需刷新页面」并给出「刷新页面」按钮；`visibilitychange` / `MutationObserver` 走 `passive: true`（只记 `debug`），用户点按钮才发现失效的路径记 `warn`，避免往站点控制台里丢扩展的警告 |
 | `src/results/results.js` | `describeFailure()` 统一出口；上下文失效时直接进 `showEmpty('reloaded')`，不再显示英文报错 |
 
 排查时若又看到裸的 `Extension context invalidated.`，说明有一处新加的 UI 文案没走 `describeError()` / `describeFailure()`，补上即可。相关断言见 `test/unit-check.mjs` 的「上下文失效」分组。
@@ -147,7 +149,9 @@ await ImageGrabDebug.destroy(sid) // 手工回收某个会话
 1. 确认结果页标签没有被关闭或休眠：长连接负责保活，页面被丢弃会导致 Service Worker 被回收。
 2. 看到「与扩展后台的连接已断开」时，刷新结果页后点「继续下载」即可——只会重跑未完成与失败的条目（`PORT_CMD.RESUME`）。
 3. 若状态行显示「上次任务被中断」，说明 SW 在下载过程中被回收，`session-store` 已把进行中的条目退回 `pending`。
-4. Chrome 弹出「是否允许下载多个文件」时需要允许；安全软件也可能拦截批量下载，检查 `chrome://downloads`。
+4. 自己点过「取消任务」也一样能接着下：未开始的条目会变成「已取消」，它们和失败的条目都算「没完成」，
+   状态行与顶部提示条会写明还剩多少张，「继续下载」按钮一直在，点它只重跑这些条目。
+5. Chrome 弹出「是否允许下载多个文件」时需要允许；安全软件也可能拦截批量下载，检查 `chrome://downloads`。
 
 ## 10. 下载的文件名不对
 

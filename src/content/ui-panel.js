@@ -24,6 +24,10 @@ const state = {
   busy: false,
   /** 扩展被重新加载后为 true：页面里这份旧代码再也调不通后台，只能等用户刷新页面 */
   dead: false,
+  /** 被动自检时是否已经记过一次 debug（页面 Console 里不重复刷同一句话） */
+  deadNoted: false,
+  /** 用户操作失败时是否已经记过一次 warn */
+  deadWarned: false,
   sid: null,
   platform: null,
   /** 当前页面是不是商品详情页（只影响提示文案：列表页/首页也会提取，只是图更杂） */
@@ -86,12 +90,27 @@ function bindRuntimeListener() {
  * 这种状态无法在页面内自愈 —— 唯一的出路是刷新页面让新脚本重新注入，
  * 所以这里统一做两件事：把面板降到「不可用」的外观，并把处置办法明确告诉用户。
  * 用户回到这个标签页时也会被动自检（见 watchLiveness），避免点下去才看到报错。
+ *
+ * @param {{showCard?: boolean, passive?: boolean}} options
+ *   passive：这次报告是被动自检（切回标签页 / 页面重绘）触发的，不是用户操作失败。
+ *   日志分两档记：这行字打在**页面**（例如 www.taobao.com）的 Console 里，站点控制台
+ *   不该出现扩展的 warn —— 被动自检只记 debug；只有用户真的点了「获取图片」/「打开结果页」
+ *   才发现失效时才记 warn，那才是排障要看的一条。两档各记一次，避免被动自检先跑过、
+ *   把真正的失败日志吃掉。
  */
-function reportContextInvalidated({ showCard = true } = {}) {
-  const firstTime = !state.dead;
+function reportContextInvalidated({ showCard = true, passive = false } = {}) {
   state.dead = true;
   state.sid = null;
-  if (firstTime) log.warn('扩展已重新加载，本页的 content script 已失效，提示用户刷新页面');
+  const reason = '扩展已重新加载，本页的 content script 已失效，需要刷新页面后重试';
+  if (passive) {
+    if (!state.deadNoted) {
+      state.deadNoted = true;
+      log.debug(`${reason}（被动自检发现，面板已降级为「需刷新页面」）`);
+    }
+  } else if (!state.deadWarned) {
+    state.deadWarned = true;
+    log.warn(reason);
+  }
 
   setBusy(false);
   const { fab } = state.refs;
@@ -111,7 +130,7 @@ function watchLiveness() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
     if (!state.mounted) return;
-    if (!isExtensionAlive()) reportContextInvalidated({ showCard: false });
+    if (!isExtensionAlive()) reportContextInvalidated({ showCard: false, passive: true });
   });
 }
 
@@ -161,7 +180,7 @@ function watchDom() {
     if (!state.mounted) return;
     // 上下文失效后重新挂载毫无意义（图标、样式都加载不出来），先如实反映状态
     if (!isExtensionAlive()) {
-      reportContextInvalidated({ showCard: false });
+      reportContextInvalidated({ showCard: false, passive: true });
       return;
     }
     if (!state.host || !state.host.isConnected) {
