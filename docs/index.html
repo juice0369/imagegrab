@@ -6,9 +6,9 @@
     <title>图提取 ImageGrab · 一键提取电商页面图片的 Chrome 扩展</title>
     <meta
       name="description"
-      content="图提取 ImageGrab 是一个 Chrome 扩展：一键提取电商页面的图片，自动去重、还原原图，统一转成 PNG 批量下载。零依赖、零构建，图片只在本机处理。"
+      content="图提取 ImageGrab 是一个 Chrome 扩展：一键提取电商页面的商品图片，自动去重、还原原图，统一转成 PNG 批量下载。零依赖、零构建，图片只在本机处理。"
     />
-    <meta name="theme-color" content="#fffbf4" />
+    <meta name="theme-color" content="#f5f5f7" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="图提取 ImageGrab · 一键提取电商页面图片的 Chrome 扩展" />
     <meta
@@ -17,42 +17,45 @@
     />
     <link rel="icon" type="image/png" sizes="48x48" href="assets/icons/icon48.png" />
     <link rel="apple-touch-icon" href="assets/icons/icon128.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
-    />
     <link rel="stylesheet" href="assets/site.css" />
+    <script>
+      // 先标记「脚本可用」：CSS 只在 .js 存在时才把待滚动淡入的内容隐藏，
+      // 避免禁用 JavaScript 时内容不可见。万一 site.js 没能加载成功，
+      // 2 秒后会撤掉这个标记，页面退回无动效状态，内容依然完整可读。
+      (function () {
+        var root = document.documentElement;
+        root.classList.add('js');
+        window.setTimeout(function () {
+          if (!root.classList.contains('js-ready')) root.classList.remove('js');
+        }, 2000);
+      })();
+    </script>
   </head>
   <body>
     <a class="skip-link" href="#main">跳到主要内容</a>
 
-    <!-- ══ 顶栏 ═══════════════════════════════════════════════ -->
+    <!-- ══ 顶部导航（滚动吸顶 + 半透明模糊） ═══════════════════ -->
     <header class="site-header">
       <div class="wrap site-header__inner">
-        <a class="brand" href="#top">
-          <img src="assets/icons/icon48.png" alt="" width="30" height="30" />
-          <span>
-            图提取 ImageGrab
-            <small>Chrome Extension</small>
-          </span>
+        <a class="brand" href="#top" aria-label="图提取 ImageGrab，返回页面顶部">
+          <img src="assets/icons/icon48.png" alt="" width="28" height="28" />
+          <span class="brand__name">图提取 ImageGrab</span>
         </a>
 
-        <nav class="site-nav" aria-label="页面导航">
-          <a href="#interface">界面展示</a>
-          <a href="#features">核心功能</a>
-          <a href="#sites">支持网站</a>
-          <a href="#install">安装步骤</a>
-          <a href="#usage">使用步骤</a>
-          <a href="#faq">常见问题</a>
+        <nav class="site-nav" id="site-nav" aria-label="页面导航">
+          <ul>
+            <li><a href="#features">功能介绍</a></li>
+            <li><a href="#usage">使用方法</a></li>
+            <li><a href="#install">安装说明</a></li>
+            <li><a href="#faq">常见问题</a></li>
+          </ul>
         </nav>
 
         <div class="site-header__cta">
-          <a class="btn btn--primary btn--sm" href="downloads/ImageGrab-v1.0.0.zip" download data-zip>
+          <a class="btn btn--primary" href="downloads/ImageGrab-v1.0.0.zip" download data-zip>
             <svg
-              width="16"
-              height="16"
+              width="17"
+              height="17"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -61,40 +64,35 @@
               stroke-linejoin="round"
               aria-hidden="true"
             >
-              <path d="M12 3v12" />
-              <path d="M7.5 10.5L12 15l4.5-4.5" />
-              <path d="M4.5 19.5h15" />
+              <path d="M12 4v10" />
+              <path d="M8 10.5l4 4 4-4" />
+              <path d="M5 18.5h14" />
             </svg>
-            <span data-zip-label>下载插件</span>
+            <span data-zip-label>立即下载</span>
           </a>
         </div>
+
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>
+          <span class="nav-toggle__text">菜单</span>
+          <span class="nav-toggle__bars" aria-hidden="true"><i></i><i></i></span>
+        </button>
       </div>
     </header>
 
     <main id="main">
-      <!-- ══ Hero ═════════════════════════════════════════════ -->
+      <!-- ══ 首屏 ═════════════════════════════════════════════ -->
       <section class="hero" id="top">
-        <div class="wrap hero__grid">
-          <div>
-            <div class="hero__badges">
-              <span class="pill">Chrome 116+</span>
-              <span class="pill">零依赖 · 零构建</span>
-              <span class="pill">本地处理，不上传</span>
-              <span class="pill">免费</span>
-            </div>
-
+        <div class="wrap">
+          <div class="hero__text">
+            <p class="hero__eyebrow">电商图片采集工具</p>
             <h1>图提取 ImageGrab</h1>
-
-            <p class="hero__lead">
-              一个 Chrome 扩展：<strong>一键提取电商页面的图片</strong
-              >，自动去重、把缩略图还原成原图，统一转成 PNG 批量下载。
-            </p>
+            <p class="hero__lead">一键把电商详情页的商品图拿全：自动去重、还原原图，统一转成 PNG 批量下载。</p>
 
             <div class="hero__actions">
-              <a class="btn btn--primary" href="downloads/ImageGrab-v1.0.0.zip" download data-zip>
+              <a class="btn btn--primary btn--lg" href="downloads/ImageGrab-v1.0.0.zip" download data-zip>
                 <svg
-                  width="18"
-                  height="18"
+                  width="19"
+                  height="19"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -103,485 +101,401 @@
                   stroke-linejoin="round"
                   aria-hidden="true"
                 >
-                  <path d="M12 3v12" />
-                  <path d="M7.5 10.5L12 15l4.5-4.5" />
-                  <path d="M4.5 19.5h15" />
+                  <path d="M12 4v10" />
+                  <path d="M8 10.5l4 4 4-4" />
+                  <path d="M5 18.5h14" />
                 </svg>
-                <span data-zip-label>下载插件 v1.0.0</span>
+                <span data-zip-label>免费下载</span>
               </a>
-              <a class="btn btn--ghost" href="#install">
-                查看安装步骤
+              <a class="btn btn--ghost btn--lg" href="#usage">
+                查看使用方法
                 <span class="btn__arrow" aria-hidden="true">→</span>
               </a>
             </div>
 
             <p class="hero__meta">
-              当前版本 <code>v1.0.0</code> · ZIP 压缩包 <span data-zip-size hidden></span> · 需要
-              Chrome 116 或更高 · 解压后「加载已解压的扩展程序」
+              当前版本 <strong>v1.0.0</strong> · 需要 Chrome 116 或更高 · 图片只在本机处理，不上传任何数据
             </p>
-
-            <ul class="hero__points">
-              <li>
-                <svg
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.4"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M20 6.5L9.5 17 4.5 12" />
-                </svg>
-                只读取当前页面 DOM 里真实存在的图片地址：不爬取、不遍历商品 ID、不绕过登录。
-              </li>
-              <li>
-                <svg
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.4"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M20 6.5L9.5 17 4.5 12" />
-                </svg>
-                图片只在本机处理，结果存在会话级临时存储里，浏览器重启即清空。
-              </li>
-              <li>
-                <svg
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.4"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M20 6.5L9.5 17 4.5 12" />
-                </svg>
-                统一转成 PNG 批量下载，跨域读不到时自动降级为原格式，不算失败。
-              </li>
-              <li>
-                <svg
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.4"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M20 6.5L9.5 17 4.5 12" />
-                </svg>
-                被过滤的图片也会列出来并写明原因，判断错了可以手动勾选下载。
-              </li>
-            </ul>
           </div>
 
-          <!-- 首屏示意图：商品页上的悬浮按钮与状态卡片 -->
-          <figure class="mock">
+          <!-- 产品效果图：插件的结果页 -->
+          <figure class="showcase" data-reveal>
             <div
-              class="mock__frame"
+              class="win win--showcase"
               role="img"
-              aria-label="示意图：电商商品页右下角有一个「获取图片」悬浮按钮，点击后展开状态卡片，提示已提取 24 张图片并可以直接打开结果页。"
+              aria-label="结果页示意图：顶部工具栏提供全选、反选、取消选择、选中失败项与显示计数，下面是下载任务进度条和缩略图网格，其中两张被过滤的图片用灰色虚线卡片标注了「尺寸过小」和「与第 3 张相同」。"
             >
-              <div class="mock__bar">
-                <span class="mock__dots" aria-hidden="true"><i></i><i></i><i></i></span>
-                <span class="mock__url">item.taobao.com/item.htm?id=…</span>
+              <div class="win__bar">
+                <span class="win__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="win__url">chrome-extension://…/results.html</span>
               </div>
-              <div class="mock__view">
-                <div class="mock-page">
-                  <div class="mock-page__crumbs"></div>
-                  <div class="mock-page__title"></div>
-                  <div class="mock-thumbs">
-                    <span class="mock-thumb"></span>
-                    <span class="mock-thumb"></span>
-                    <span class="mock-thumb"></span>
-                    <span class="mock-thumb"></span>
-                    <span class="mock-thumb"></span>
-                    <span class="mock-thumb"></span>
+              <div class="win__body">
+                <div class="res">
+                  <div class="res__head">
+                    <span class="res__brand">
+                      <img src="assets/icons/icon48.png" alt="" width="20" height="20" />
+                      <span>图提取 ImageGrab<em>扫描到 30 个地址，保留 24 张</em></span>
+                    </span>
+                    <span class="cbtn cbtn--ghost">重新读取</span>
                   </div>
-                </div>
-                <div class="mock-panel">
-                  <div class="mock-card">
-                    <div class="mock-card__head">
-                      <span class="mock-card__title">提取完成</span>
-                      <span class="mock-card__close" aria-hidden="true">×</span>
-                    </div>
-                    <p class="mock-card__text">已提取 24 张图片，结果页已打开。</p>
-                    <div class="mock-card__track"><i style="width: 100%"></i></div>
-                    <div class="mock-card__actions">
-                      <span class="mock-btn mock-btn--primary">打开结果页</span>
-                      <span class="mock-btn">重新提取</span>
-                    </div>
+
+                  <div class="res__toolbar">
+                    <span class="cbtn">全选</span>
+                    <span class="cbtn">反选</span>
+                    <span class="cbtn">取消选择</span>
+                    <span class="cbtn">选中失败项</span>
+                    <span class="res__counter">显示 24 / 30</span>
                   </div>
-                  <span class="mock-fab">获取图片<span class="mock-badge">24</span></span>
+
+                  <div class="res__runbar">
+                    <span class="res__runtext">正在下载 15 / 24 …</span>
+                    <span class="cbtn cbtn--primary">下载选中（24）</span>
+                    <span class="bar"><i></i></span>
+                  </div>
+
+                  <div class="res__grid" aria-hidden="true">
+                    <span class="cell is-picked"></span>
+                    <span class="cell is-picked"></span>
+                    <span class="cell"></span>
+                    <span class="cell is-picked"></span>
+                    <span class="cell is-picked"></span>
+                    <span class="cell is-picked"></span>
+                    <span class="cell is-filtered"><span class="cell__tag">尺寸过小</span></span>
+                    <span class="cell"></span>
+                    <span class="cell is-filtered"><span class="cell__tag">与第 3 张相同</span></span>
+                    <span class="cell is-picked"></span>
+                    <span class="cell is-picked"></span>
+                    <span class="cell"></span>
+                  </div>
                 </div>
               </div>
             </div>
-            <figcaption>
-              <b>界面示意图。</b>结构与文案取自实际插件，配色为官网示意，仅供参考。
-            </figcaption>
+            <figcaption>结果页示意图：工具栏、下载进度与缩略图网格，被过滤的图片同样列出并写明原因。</figcaption>
           </figure>
         </div>
       </section>
 
-      <!-- ══ 界面展示 ═════════════════════════════════════════ -->
-      <section class="section section--tint" id="interface">
-        <div class="wrap">
-          <div class="section__head">
-            <span class="eyebrow">界面展示</span>
-            <h2>提取结果都在一个页面里核对与下载</h2>
-            <p>
-              结果页把缩略图、过滤原因、下载进度放在同一屏：默认勾选所有还没成功下载过的图片，被规则拦下的图片用灰色虚线卡片列出原因，误判的可以直接勾上一起下载。
-            </p>
-          </div>
-
-          <div class="mocks">
-            <!-- 结果页 -->
-            <figure class="mock">
-              <div
-                class="mock__frame"
-                role="img"
-                aria-label="示意图：结果页顶部是工具栏（全选、反选、取消选择、选中失败项，以及范围、尺寸、状态筛选和显示计数），下面是下载任务条与缩略图网格，其中两张被过滤的图片用灰色虚线卡片标注了「尺寸过小」和「重复」。"
-              >
-                <div class="mock__bar">
-                  <span class="mock__dots" aria-hidden="true"><i></i><i></i><i></i></span>
-                  <span class="mock__url">chrome-extension://…/results.html</span>
-                </div>
-                <div class="mock__view">
-                  <div class="mock-results">
-                    <div class="mock-results__head">
-                      <span class="mock-brand">
-                        <img src="assets/icons/icon48.png" alt="" width="20" height="20" />
-                        <span>图提取 ImageGrab<em>扫描到 30 个地址，保留 24 张</em></span>
-                      </span>
-                      <span class="mock-head-actions">
-                        <span class="mock-btn mock-btn--ghost">重新读取</span>
-                      </span>
-                    </div>
-
-                    <div class="mock-toolbar">
-                      <span class="mock-btn">全选</span>
-                      <span class="mock-btn">反选</span>
-                      <span class="mock-btn">取消选择</span>
-                      <span class="mock-btn">选中失败项</span>
-                      <span class="mock-counter">显示 24 / 30</span>
-                    </div>
-
-                    <div class="mock-runbar">
-                      <span class="mock-runbar__text">正在下载 15 / 24 …</span>
-                      <span class="mock-btn mock-btn--primary">下载选中（24）</span>
-                      <span class="mock-progress"><i></i></span>
-                    </div>
-
-                    <div class="mock-grid">
-                      <span class="mock-cell is-picked"></span>
-                      <span class="mock-cell is-picked"></span>
-                      <span class="mock-cell"></span>
-                      <span class="mock-cell is-picked"></span>
-                      <span class="mock-cell is-picked"></span>
-                      <span class="mock-cell is-picked"></span>
-                      <span class="mock-cell is-filtered"
-                        ><span class="mock-cell__tag">尺寸过小</span></span
-                      >
-                      <span class="mock-cell"></span>
-                      <span class="mock-cell is-filtered"
-                        ><span class="mock-cell__tag">与第 3 张相同</span></span
-                      >
-                      <span class="mock-cell is-picked"></span>
-                      <span class="mock-cell is-picked"></span>
-                      <span class="mock-cell"></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <figcaption>
-                <b>结果页：</b>工具栏筛选与批量选择、下载任务条、缩略图网格，以及被过滤条目的原因标签。
-              </figcaption>
-            </figure>
-
-            <!-- 面板细节 -->
-            <figure class="mock">
-              <div
-                class="mock__frame"
-                role="img"
-                aria-label="示意图：悬浮面板展开「过滤详情」，按原因列出被过滤的张数，例如尺寸过小 4 张、命中图标关键字 2 张，并给出打开结果页与重新提取两个操作。"
-              >
-                <div class="mock__bar">
-                  <span class="mock__dots" aria-hidden="true"><i></i><i></i><i></i></span>
-                  <span class="mock__url">www.tmall.com · 页面右下角</span>
-                </div>
-                <div class="mock__view mock-view--plain">
-                  <div class="mock-detail">
-                    <div class="mock-card">
-                      <div class="mock-card__head">
-                        <span class="mock-card__title">提取完成</span>
-                        <span class="mock-card__close" aria-hidden="true">×</span>
-                      </div>
-                      <p class="mock-card__text">
-                        已提取 24 张图片，过滤掉 6 张。被过滤的图片也列在结果页里，可以手动勾选下载。
-                      </p>
-                      <div class="mock-card__track"><i style="width: 100%"></i></div>
-                      <div class="mock-card__detail">
-                        <span class="mock-card__detail-title">过滤详情</span>
-                        <ul class="mock-card__detail-list">
-                          <li>尺寸过小：4 张</li>
-                          <li>命中图标 / logo 关键字：2 张</li>
-                        </ul>
-                      </div>
-                      <div class="mock-card__actions">
-                        <span class="mock-btn mock-btn--primary">打开结果页</span>
-                        <span class="mock-btn">重新提取</span>
-                      </div>
-                    </div>
-                    <span class="mock-fab">获取图片<span class="mock-badge">24</span></span>
-                  </div>
-                </div>
-              </div>
-              <figcaption>
-                <b>悬浮面板：</b>提取完成后给出图片数量、过滤原因明细，以及「打开结果页 / 重新提取」。
-              </figcaption>
-            </figure>
-          </div>
-        </div>
-      </section>
-
-      <!-- ══ 核心功能 ═════════════════════════════════════════ -->
+      <!-- ══ 功能介绍 ═════════════════════════════════════════ -->
       <section class="section" id="features">
         <div class="wrap">
-          <div class="section__head">
-            <span class="eyebrow">核心功能</span>
+          <div class="section__head" data-reveal>
+            <p class="eyebrow">功能介绍</p>
             <h2>从点一下按钮，到拿到干净的 PNG</h2>
             <p>提取、去重、还原原图、转换、下载各司其职，出问题的环节都会在界面上说明原因。</p>
           </div>
 
-          <div class="cards">
-            <article class="card">
-              <span class="card__icon" aria-hidden="true">
-                <svg
-                  width="22"
-                  height="22"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.9"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M5.5 3.5l6 15 2-5.6 5.6-2z" />
-                  <path d="M17 17l3.5 3.5" />
-                </svg>
-              </span>
-              <h3>一键提取整页图片</h3>
+          <div class="features">
+            <!-- 大卡片 1：深色，附悬浮面板示意图 -->
+            <article class="feature feature--wide feature--dark" data-reveal>
+              <h3>一键获取商品图片</h3>
               <p>
-                点一下按钮，扩展先滚动页面触发懒加载，再扫描页面里所有图片地址：<code>&lt;img&gt;</code>、<code>srcset</code>、内联样式里的背景图，以及同源 iframe。
+                点一下页面右下角的按钮，扩展先滚动页面触发懒加载，再扫描页面里所有图片地址：<code>&lt;img&gt;</code>、<code>srcset</code>、内联样式里的背景图，以及同源 iframe。缩略图地址会按平台规则还原成原图地址。
               </p>
+
+              <figure class="feature__art feature__art--panel">
+                <div
+                  class="win"
+                  role="img"
+                  aria-label="悬浮面板示意图：页面右下角的「获取图片」按钮展开状态卡片，提示已提取 24 张图片、过滤掉 6 张，并列出过滤原因明细，提供「打开结果页」与「重新提取」两个操作。"
+                >
+                  <div class="win__bar">
+                    <span class="win__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <span class="win__url">item.taobao.com/item.htm?id=…</span>
+                  </div>
+                  <div class="win__body win__body--centered">
+                    <div class="panel">
+                      <div class="panel__card">
+                        <div class="panel__head">
+                          <span class="panel__title">提取完成</span>
+                          <span class="panel__close" aria-hidden="true">×</span>
+                        </div>
+                        <p class="panel__text">已提取 24 张图片，过滤掉 6 张。被过滤的图片也列在结果页里，可以手动勾选下载。</p>
+                        <div class="bar"><i style="width: 100%"></i></div>
+                        <div class="panel__detail">
+                          <span class="panel__detail-title">过滤详情</span>
+                          <ul>
+                            <li>尺寸过小：4 张</li>
+                            <li>命中图标 / logo 关键字：2 张</li>
+                          </ul>
+                        </div>
+                        <div class="panel__actions">
+                          <span class="cbtn cbtn--primary">打开结果页</span>
+                          <span class="cbtn">重新提取</span>
+                        </div>
+                      </div>
+                      <span class="fab">获取图片<span class="fab__badge">24</span></span>
+                    </div>
+                  </div>
+                </div>
+              </figure>
             </article>
 
-            <article class="card">
-              <span class="card__icon" aria-hidden="true">
-                <svg
-                  width="22"
-                  height="22"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.9"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M4 9V5.5A1.5 1.5 0 015.5 4H9" />
-                  <path d="M15 4h3.5A1.5 1.5 0 0120 5.5V9" />
-                  <path d="M20 15v3.5a1.5 1.5 0 01-1.5 1.5H15" />
-                  <path d="M9 20H5.5A1.5 1.5 0 014 18.5V15" />
-                  <path d="M9 15l6-6" />
-                </svg>
-              </span>
-              <h3>缩略图还原成原图</h3>
+            <!-- 大卡片 2：白色，过滤规则 -->
+            <article class="feature" data-reveal>
+              <h3>自动过滤重复图片</h3>
               <p>
-                按平台规则把 <code>_400x400.jpg</code>、<code>_.webp</code> 这类缩略图地址还原成原图地址；还原后的地址失效时，回退下载页面上真实存在的那个地址。
+                去重时会忽略尺寸后缀、埋点参数（<code>spm</code>、<code>ali_trackid</code>、<code>utm_*</code>）和同一 CDN 的不同子域，同一张图不会下载两遍。被规则拦下的条目不会被丢掉，而是单独列出来并写明原因。
               </p>
+              <ul class="chips chips--bottom" aria-label="会被自动过滤的条目类型">
+                <li>占位图</li>
+                <li>图标 / logo</li>
+                <li>装饰区域</li>
+                <li>尺寸过小</li>
+                <li>长宽比异常</li>
+                <li>重复</li>
+              </ul>
             </article>
 
-            <article class="card">
-              <span class="card__icon" aria-hidden="true">
-                <svg
-                  width="22"
-                  height="22"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.9"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M4 5h16l-6.2 7.3V19l-3.6-2v-4.7z" />
-                </svg>
-              </span>
-              <h3>智能去重与过滤</h3>
-              <p>
-                去重会忽略尺寸后缀、埋点参数（<code>spm</code>、<code>ali_trackid</code>、<code>utm_*</code>）和同一 CDN 的不同子域；图标、logo、占位图、装饰区域、过小图片与长宽比异常的条目会被拦下。
-              </p>
+            <!-- 大卡片 3：白色，下载方式 -->
+            <article class="feature" data-reveal>
+              <h3>支持单张与批量下载</h3>
+              <p>默认已经勾选所有还没成功下载过的图片，也可以逐张挑选：</p>
+              <ul class="list">
+                <li>用「全选 / 反选 / 取消选择 / 选中失败项」批量调整。</li>
+                <li>每张卡片右下角都有「单张下载」。</li>
+                <li>点「取消任务」会停下还没开始的条目，已经开始的不打断，避免留下半截文件。</li>
+                <li>中断后点「继续下载」，只跑未完成与失败的条目。</li>
+              </ul>
+              <div class="chips chips--bottom chips--muted" aria-hidden="true">
+                <span class="cbtn cbtn--primary">下载选中（24）</span>
+                <span class="cbtn">单张下载</span>
+                <span class="cbtn">继续下载</span>
+                <span class="cbtn">取消任务</span>
+              </div>
             </article>
 
-            <article class="card">
-              <span class="card__icon" aria-hidden="true">
-                <svg
-                  width="22"
-                  height="22"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.9"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M12 3v11" />
-                  <path d="M7.5 9.5L12 14l4.5-4.5" />
-                  <path d="M4.5 18.5h15" />
-                </svg>
-              </span>
-              <h3>统一转 PNG 批量下载</h3>
+            <!-- 大卡片 4：深色，格式转换 -->
+            <article class="feature feature--wide feature--dark" data-reveal>
+              <h3>图片统一转换为 PNG</h3>
               <p>
-                JPG、JPEG、WebP、GIF、BMP 都在离屏文档里用 Canvas 统一转成 PNG；文件名形如
-                <code>商品图_001.png</code>，编号在同一个会话里连续递增。
+                所有格式都在离屏文档里用 Canvas 统一转成 PNG，文件名形如
+                <code>商品图_001.png</code>，直接用图片软件打开就行，不用再逐张另存。
               </p>
+              <ul class="list">
+                <li>编号在同一个会话里连续递增，结果页顶部会显示「下一个文件名」。</li>
+                <li>跨域读不到像素时按原格式下载并标记「原格式」，不计入失败。</li>
+                <li>确实失败的条目会标红写明原因，可以单张重试，或只继续未完成与失败的条目。</li>
+              </ul>
+              <div class="convert" aria-hidden="true">
+                <ul class="convert__from">
+                  <li>JPG</li>
+                  <li>JPEG</li>
+                  <li>WebP</li>
+                  <li>GIF</li>
+                  <li>BMP</li>
+                </ul>
+                <span class="convert__arrow">→</span>
+                <span class="convert__to">PNG</span>
+              </div>
             </article>
 
-            <article class="card">
-              <span class="card__icon" aria-hidden="true">
-                <svg
-                  width="22"
-                  height="22"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.9"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M20 11.5a8 8 0 10-2.6 5.9" />
-                  <path d="M20 5.5v6h-6" />
-                </svg>
-              </span>
-              <h3>失败可见、可重试</h3>
-              <p>
-                跨域导致读不到像素时自动按原格式下载并标记「原格式」，不计入失败；确实失败的条目会标红写明原因，可以单张重试或只继续未完成的条目。
+            <!-- 大卡片 5：整行，支持的平台 -->
+            <article class="feature feature--full" data-reveal>
+              <h3>支持淘宝、天猫、京东和拼多多商家页面</h3>
+              <p class="feature__lead">
+                能不能提取只取决于页面上有没有图片，跟页面类型无关：首页、搜索页、列表页、详情页都会出现「获取图片」按钮。所有处理都在本机完成，不搭服务端、不上传数据。
               </p>
-            </article>
 
-            <article class="card">
-              <span class="card__icon" aria-hidden="true">
-                <svg
-                  width="22"
-                  height="22"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.9"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M12 3l7 2.8v5.4c0 4.2-2.8 7.5-7 9.3-4.2-1.8-7-5.1-7-9.3V5.8z" />
-                  <path d="M9 12l2.2 2.2L15.5 10" />
-                </svg>
-              </span>
-              <h3>只在本机处理</h3>
-              <p>
-                不上传任何数据，不搭服务端代理，不保存密钥；提取结果只写入会话级临时存储，浏览器重启、扩展重载或结果页关闭即清理。
+              <ul class="platforms">
+                <li>
+                  <span class="platforms__name">淘宝</span>
+                  <span class="platforms__hosts">
+                    <code>item.taobao.com</code>
+                    <code>www.taobao.com</code>
+                    <code>s.taobao.com</code>
+                  </span>
+                </li>
+                <li>
+                  <span class="platforms__name">天猫</span>
+                  <span class="platforms__hosts">
+                    <code>detail.tmall.com</code>
+                    <code>www.tmall.com</code>
+                  </span>
+                </li>
+                <li>
+                  <span class="platforms__name">京东</span>
+                  <span class="platforms__hosts">
+                    <code>item.jd.com</code>
+                    <code>item.m.jd.com</code>
+                    <code>www.jd.com</code>
+                    <code>search.jd.com</code>
+                  </span>
+                </li>
+                <li>
+                  <span class="platforms__name">拼多多</span>
+                  <span class="platforms__hosts">
+                    <code>mobile.yangkeduo.com</code>
+                    <code>mms.pinduoduo.com</code>
+                  </span>
+                </li>
+              </ul>
+
+              <p class="note">
+                <strong>不在列表里的站点不会注入内容脚本</strong>，页面上不会出现按钮（工具栏图标仍可打开最近一次结果页）。平台换域名时，把新域名加进
+                <code>PLATFORMS</code> 的 <code>hostPattern</code> 与 <code>manifest.json</code> 的
+                <code>matches</code> 即可，通常只需要改这两个地方。本地的
+                <code>localhost</code> / <code>127.0.0.1</code> 仅用于开发测试。
               </p>
             </article>
           </div>
         </div>
       </section>
 
-      <!-- ══ 支持的网站 ═══════════════════════════════════════ -->
-      <section class="section section--tint" id="sites">
+      <!-- ══ 使用方法 ═════════════════════════════════════════ -->
+      <section class="section section--light" id="usage">
         <div class="wrap">
-          <div class="section__head">
-            <span class="eyebrow">支持的网站</span>
-            <h2>这些域名下的页面都能用</h2>
-            <p>
-              能不能提取只取决于页面上有没有图片，跟页面类型无关：首页、搜索页、列表页、详情页都会出现「获取图片」按钮。
+          <div class="section__head section__head--center" data-reveal>
+            <p class="eyebrow">使用方法</p>
+            <h2>三步拿到商品图</h2>
+            <p>装好之后，每次采集只有三步。按钮会记住你拖动后的位置，工具栏图标等价于「打开最近一次提取结果」。</p>
+          </div>
+
+          <ol class="flow">
+            <li class="flow__item" data-reveal>
+              <span class="flow__icon" aria-hidden="true">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="3" y="4" width="18" height="16" rx="3.5" />
+                  <path d="M3 8.5h18" />
+                  <path d="M12 11.5v5" />
+                  <path d="M9.5 14h5" />
+                </svg>
+              </span>
+              <span class="flow__step">第 1 步</span>
+              <h3>安装并启用插件</h3>
+              <p>
+                下载 ZIP 并解压，在 Chrome 的扩展程序页面用「加载已解压的扩展程序」选中解压出来的文件夹。装好后建议固定到工具栏。
+              </p>
+              <ul class="list list--tight">
+                <li>完整步骤见 <a href="#install">安装说明</a>。</li>
+                <li>地址栏右侧拼图图标 → 固定「图提取 ImageGrab」。</li>
+              </ul>
+            </li>
+
+            <li class="flow__item" data-reveal>
+              <span class="flow__icon" aria-hidden="true">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M6 8.5h12l-1.2 11.5H7.2z" />
+                  <path d="M9 8.5V7a3 3 0 016 0v1.5" />
+                </svg>
+              </span>
+              <span class="flow__step">第 2 步</span>
+              <h3>打开支持的商品页面</h3>
+              <p>在淘宝、天猫、京东或拼多多商家页面里点右下角的「获取图片」。</p>
+              <ul class="list list--tight">
+                <li>扩展会先滚动页面触发懒加载，再扫描、补全地址、还原原图、去重过滤。</li>
+                <li>有结果时自动打开结果页；一张都没提取到时，状态卡片会按原因展开过滤明细。</li>
+              </ul>
+            </li>
+
+            <li class="flow__item" data-reveal>
+              <span class="flow__icon" aria-hidden="true">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M12 4v9" />
+                  <path d="M8.5 9.5L12 13l3.5-3.5" />
+                  <path d="M5 15.5v2A2.5 2.5 0 007.5 20h9a2.5 2.5 0 002.5-2.5v-2" />
+                </svg>
+              </span>
+              <span class="flow__step">第 3 步</span>
+              <h3>获取、选择并下载图片</h3>
+              <p>
+                在结果页里核对图片、勾选要下载的条目，然后点「下载选中」。筛选只影响显示，不影响已勾选项。
+              </p>
+              <ul class="list list--tight">
+                <li>被过滤的图片是灰色虚线卡片，徽标写明原因，误判的可手动勾上。</li>
+                <li>文件统一转成 PNG，落在浏览器下载目录，编号在同一会话里连续递增。</li>
+              </ul>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- ══ 下载（深色） ═════════════════════════════════════ -->
+      <section class="band" id="download">
+        <div class="wrap">
+          <div class="band__inner" data-reveal>
+            <h2>准备好开始采集了吗？</h2>
+            <p class="band__lead">下载压缩包、完整解压，就能在浏览器里加载使用。免费，无需注册，无需构建。</p>
+
+            <div class="band__actions">
+              <a class="btn btn--primary btn--lg" href="downloads/ImageGrab-v1.0.0.zip" download data-zip>
+                <svg
+                  width="19"
+                  height="19"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 4v10" />
+                  <path d="M8 10.5l4 4 4-4" />
+                  <path d="M5 18.5h14" />
+                </svg>
+                <span data-zip-label>下载插件</span>
+              </a>
+              <a class="btn btn--outline btn--lg" href="#install">查看安装说明</a>
+            </div>
+
+            <dl class="facts">
+              <div class="facts__item">
+                <dt>当前版本</dt>
+                <dd>v1.0.0</dd>
+              </div>
+              <div class="facts__item">
+                <dt>压缩包大小</dt>
+                <dd><span data-zip-size>—</span></dd>
+              </div>
+              <div class="facts__item">
+                <dt>支持的浏览器</dt>
+                <dd>Chrome 116 及以上</dd>
+              </div>
+              <div class="facts__item">
+                <dt>安装方式</dt>
+                <dd>解压后加载，无需构建</dd>
+              </div>
+            </dl>
+
+            <p class="band__note" id="download-hint">
+              按钮指向本站目录下的 <code>downloads/ImageGrab-v1.0.0.zip</code>，点击后会直接开始下载。
             </p>
           </div>
-
-          <ul class="sites">
-            <li class="site-row">
-              <span class="site-row__name">淘宝</span>
-              <span class="site-row__hosts">
-                <code>item.taobao.com</code>
-                <code>www.taobao.com</code>
-                <code>s.taobao.com</code>
-              </span>
-              <span class="site-row__status"><span class="pill pill--ok">支持</span></span>
-            </li>
-            <li class="site-row">
-              <span class="site-row__name">天猫</span>
-              <span class="site-row__hosts">
-                <code>detail.tmall.com</code>
-                <code>www.tmall.com</code>
-              </span>
-              <span class="site-row__status"><span class="pill pill--ok">支持</span></span>
-            </li>
-            <li class="site-row">
-              <span class="site-row__name">京东</span>
-              <span class="site-row__hosts">
-                <code>item.jd.com</code>
-                <code>item.m.jd.com</code>
-                <code>www.jd.com</code>
-                <code>search.jd.com</code>
-              </span>
-              <span class="site-row__status"><span class="pill pill--ok">支持</span></span>
-            </li>
-            <li class="site-row">
-              <span class="site-row__name">拼多多</span>
-              <span class="site-row__hosts">
-                <code>mobile.yangkeduo.com</code>
-              </span>
-              <span class="site-row__status"><span class="pill pill--ok">支持</span></span>
-            </li>
-            <li class="site-row">
-              <span class="site-row__name">拼多多商家后台</span>
-              <span class="site-row__hosts">
-                <code>mms.pinduoduo.com</code>
-              </span>
-              <span class="site-row__status"><span class="pill pill--ok">支持</span></span>
-            </li>
-            <li class="site-row">
-              <span class="site-row__name">本地测试页</span>
-              <span class="site-row__hosts">
-                <code>localhost</code>
-                <code>127.0.0.1</code>
-              </span>
-              <span class="site-row__status"><span class="pill pill--warn">仅开发测试</span></span>
-            </li>
-          </ul>
-
-          <p class="callout">
-            <strong>不在列表里的站点不会注入内容脚本</strong>，页面上不会出现按钮（工具栏图标仍可打开最近一次结果页）。平台换域名时，把新域名加进
-            <code>PLATFORMS</code> 的 <code>hostPattern</code> 与 <code>manifest.json</code> 的
-            <code>matches</code> 即可，通常只需要改这两个地方。
-          </p>
         </div>
       </section>
 
-      <!-- ══ 安装步骤 ═════════════════════════════════════════ -->
+      <!-- ══ 安装说明 ═════════════════════════════════════════ -->
       <section class="section" id="install">
         <div class="wrap">
-          <div class="section__head">
-            <span class="eyebrow">安装步骤</span>
+          <div class="section__head" data-reveal>
+            <p class="eyebrow">安装说明</p>
             <h2>下载 → 解压 → 加载已解压的扩展程序</h2>
             <p>
               这个插件没有上架 Chrome 应用商店，需要手动加载。整个过程大约一分钟，不需要开发者工具链，也不需要
@@ -590,65 +504,65 @@
           </div>
 
           <ol class="steps">
-            <li class="step">
-              <span class="step__num">1</span>
-              <div>
-                <h3>下载压缩包</h3>
+            <li class="step" data-reveal>
+              <span class="step__num" aria-hidden="true">1</span>
+              <div class="step__body">
+                <h3>下载插件 ZIP 压缩包</h3>
                 <p>
-                  点击页面上的
-                  <a href="#download">「下载插件 v1.0.0」</a
+                  点击页面上的 <a href="#download">「下载插件」</a
                   >，得到 <code>ImageGrab-v1.0.0.zip</code>。
                 </p>
               </div>
             </li>
 
-            <li class="step">
-              <span class="step__num">2</span>
-              <div>
-                <h3>解压 ZIP</h3>
+            <li class="step" data-reveal>
+              <span class="step__num" aria-hidden="true">2</span>
+              <div class="step__body">
+                <h3>将 ZIP 文件完整解压</h3>
                 <p>
                   右键压缩包 → 解压到任意目录（例如桌面）。解压后会得到一个
                   <code>ImageGrab-v1.0.0</code> 文件夹，里面直接就是
                   <code>manifest.json</code>、<code>src/</code> 和 <code>assets/</code>。
                 </p>
-                <span class="step__note"
-                  >必须解压：Chrome 不能直接加载 ZIP，第 5 步选的是解压出来的文件夹。</span
-                >
+                <p class="step__note">必须解压：Chrome 不能直接加载 ZIP，第 6 步选的是解压出来的文件夹。</p>
               </div>
             </li>
 
-            <li class="step">
-              <span class="step__num">3</span>
-              <div>
-                <h3>打开扩展程序页面</h3>
+            <li class="step" data-reveal>
+              <span class="step__num" aria-hidden="true">3</span>
+              <div class="step__body">
+                <h3>打开 Chrome 的扩展程序管理页面</h3>
+                <p>在 Chrome 地址栏输入 <code>chrome://extensions</code> 并回车。</p>
+              </div>
+            </li>
+
+            <li class="step" data-reveal>
+              <span class="step__num" aria-hidden="true">4</span>
+              <div class="step__body">
+                <h3>开启开发者模式</h3>
+                <p>打开页面右上角的「开发者模式」开关，左上角会出现「加载已解压的扩展程序」按钮。</p>
+              </div>
+            </li>
+
+            <li class="step" data-reveal>
+              <span class="step__num" aria-hidden="true">5</span>
+              <div class="step__body">
+                <h3>点击「加载已解压的扩展程序」</h3>
+                <p>点击左上角的这个按钮，会弹出选择文件夹的窗口。</p>
+              </div>
+            </li>
+
+            <li class="step" data-reveal>
+              <span class="step__num" aria-hidden="true">6</span>
+              <div class="step__body">
+                <h3>选择包含 manifest.json 的插件文件夹</h3>
                 <p>
-                  在 Chrome 地址栏输入 <code>chrome://extensions</code> 并回车。
-                </p>
-              </div>
-            </li>
-
-            <li class="step">
-              <span class="step__num">4</span>
-              <div>
-                <h3>打开右上角的「开发者模式」</h3>
-                <p>开启后左上角会出现「加载已解压的扩展程序」按钮。</p>
-              </div>
-            </li>
-
-            <li class="step">
-              <span class="step__num">5</span>
-              <div>
-                <h3>选择解压出来的文件夹</h3>
-                <p>
-                  点击「加载已解压的扩展程序」，选中第 2 步解压出来的
-                  <code>ImageGrab-v1.0.0</code> 文件夹（也就是包含
+                  选中第 2 步解压出来的 <code>ImageGrab-v1.0.0</code> 文件夹（也就是包含
                   <code>manifest.json</code> 的那一层）。
                 </p>
-                <ul>
+                <ul class="list list--tight">
                   <li>加载成功后列表里会出现「图提取 ImageGrab」。</li>
-                  <li>
-                    建议固定到工具栏：点地址栏右侧的拼图图标 → 固定「图提取 ImageGrab」。
-                  </li>
+                  <li>建议固定到工具栏：点地址栏右侧的拼图图标 → 固定「图提取 ImageGrab」。</li>
                   <li>如果提示清单文件缺失，说明选错了层级，改选含 manifest.json 的目录。</li>
                 </ul>
               </div>
@@ -657,105 +571,30 @@
         </div>
       </section>
 
-      <!-- ══ 使用步骤 ═════════════════════════════════════════ -->
-      <section class="section section--tint" id="usage">
-        <div class="wrap">
-          <div class="section__head">
-            <span class="eyebrow">使用步骤</span>
-            <h2>从商品页到下载目录</h2>
-            <p>按钮会记住你拖动后的位置；工具栏图标则等价于「打开最近一次提取结果」。</p>
-          </div>
-
-          <ol class="steps">
-            <li class="step">
-              <span class="step__num">1</span>
-              <div>
-                <h3>打开一个受支持的电商页面</h3>
-                <p>商品详情页、首页、搜索页、列表页都可以，只要页面上有图片。</p>
-              </div>
-            </li>
-
-            <li class="step">
-              <span class="step__num">2</span>
-              <div>
-                <h3>点击右下角的「获取图片」</h3>
-                <p>
-                  悬浮按钮可以拖动，位置会被记住。点击后扩展会先滚动页面触发懒加载，再扫描图片、补全地址、还原原图、去重过滤。
-                </p>
-                <ul>
-                  <li>有结果时自动打开结果页标签。</li>
-                  <li>一张都没提取到时，状态卡片会按原因展开过滤明细。</li>
-                </ul>
-              </div>
-            </li>
-
-            <li class="step">
-              <span class="step__num">3</span>
-              <div>
-                <h3>在结果页里核对与勾选</h3>
-                <p>
-                  默认已经勾选所有还没成功下载过的图片。用「全选 / 反选 / 取消选择 /
-                  选中失败项」批量调整，或用「范围 / 尺寸 / 状态」筛选列表；筛选只影响显示，不影响已勾选项。
-                </p>
-                <ul>
-                  <li>被过滤的图片是灰色虚线卡片，徽标写明原因，默认不勾选，误判的可手动勾上。</li>
-                  <li>点卡片或勾选框都能切换选中状态。</li>
-                </ul>
-              </div>
-            </li>
-
-            <li class="step">
-              <span class="step__num">4</span>
-              <div>
-                <h3>点「下载选中」开始批量下载</h3>
-                <p>
-                  每张卡片右下角也有「单张下载」。点「取消任务」会停下还没开始的条目，已经开始的不打断，避免留下半截文件；中断后可以点「继续下载」只跑未完成与失败的条目。
-                </p>
-              </div>
-            </li>
-
-            <li class="step">
-              <span class="step__num">5</span>
-              <div>
-                <h3>在下载目录里取用</h3>
-                <p>
-                  文件默认落在浏览器的下载目录，统一转成 PNG，文件名形如
-                  <code>商品图_001.png</code>；编号在同一个会话里连续递增，结果页顶部会显示「下一个文件名」。
-                </p>
-                <ul>
-                  <li>跨域读不到像素的条目会按原格式下载，并标记「原格式」。</li>
-                  <li>确实失败的条目会标红写明原因，并有「重试」。</li>
-                </ul>
-              </div>
-            </li>
-          </ol>
-        </div>
-      </section>
-
       <!-- ══ 常见问题 ═════════════════════════════════════════ -->
-      <section class="section" id="faq">
+      <section class="section section--light" id="faq">
         <div class="wrap">
-          <div class="section__head">
-            <span class="eyebrow">常见问题</span>
+          <div class="section__head" data-reveal>
+            <p class="eyebrow">常见问题</p>
             <h2>安装和使用时最常遇到的情况</h2>
-            <p>照着上面的安装步骤走一遍，这些问题基本都不会出现。</p>
+            <p>照着上面的安装说明走一遍，这些问题基本都不会出现。</p>
           </div>
 
           <div class="faq">
-            <details class="faq-item" open>
+            <details class="faq__item" open data-reveal>
               <summary>下载下来的 ZIP 能直接「加载已解压的扩展程序」吗？</summary>
-              <div class="faq-body">
+              <div class="faq__body">
                 <p>
                   不能。Chrome 只接受文件夹，所以必须先解压 ZIP，然后在
                   <code>chrome://extensions</code> 里选择解压出来的那个文件夹（含
-                  <code>manifest.json</code> 的那一层）。直接选 ZIP 文件时选择框根本不会让你确认。
+                  <code>manifest.json</code> 的那一层）。直接选 ZIP 文件时，选择框根本不会让你确认。
                 </p>
               </div>
             </details>
 
-            <details class="faq-item">
+            <details class="faq__item" data-reveal>
               <summary>为什么要求 Chrome 116 或更高？</summary>
-              <div class="faq-body">
+              <div class="faq__body">
                 <p>
                   插件用到 <code>chrome.runtime.getContexts</code> 和离屏文档（Offscreen
                   Document）来在后台把图片转成 PNG，这两个能力在 Chrome 116
@@ -764,20 +603,20 @@
               </div>
             </details>
 
-            <details class="faq-item">
+            <details class="faq__item" data-reveal>
               <summary>会不会把我的图片或账号信息上传到服务器？</summary>
-              <div class="faq-body">
+              <div class="faq__body">
                 <p>
                   不会。扩展不搭服务端，也没有任何上传逻辑：图片只在本机用 Canvas
-                  处理。它不会爬取、不遍历商品 ID、不绕过登录与鉴权，提取结果只写入
+                  处理。它不爬取、不遍历商品 ID、不绕过登录与鉴权，提取结果只写入
                   <code>chrome.storage.session</code>（会话级临时存储），浏览器重启即清空。
                 </p>
               </div>
             </details>
 
-            <details class="faq-item">
+            <details class="faq__item" data-reveal>
               <summary>为什么提取到的图片比我预期的少？</summary>
-              <div class="faq-body">
+              <div class="faq__body">
                 <p>
                   多半是被过滤规则拦下了。结果页顶部会写明「扫描到 N 个地址，保留 M
                   张，过滤掉 K 张」，被过滤的图片也会以灰色虚线卡片列出来，徽标写明原因：占位图、图标/广告、装饰区域、尺寸过小、长宽比异常、重复。
@@ -786,29 +625,29 @@
               </div>
             </details>
 
-            <details class="faq-item">
+            <details class="faq__item" data-reveal>
               <summary>为什么下载下来的图片标记成「原格式」而不是 PNG？</summary>
-              <div class="faq-body">
+              <div class="faq__body">
                 <p>
                   说明这张图跨域了：虽然能下载，但画布读不到像素，没法转 PNG。这时扩展会按原格式下载并标注「原格式」，不计入失败。批量结束的汇总里也会单独列出「原格式 N 张（不算失败）」。
                 </p>
               </div>
             </details>
 
-            <details class="faq-item">
+            <details class="faq__item" data-reveal>
               <summary>批量下载到一半提示「与扩展后台的连接已断开」怎么办？</summary>
-              <div class="faq-body">
+              <div class="faq__body">
                 <p>
                   这是浏览器的 Service Worker 被回收导致的，任务会中断但进度不丢。刷新结果页后点「继续下载」，就只会重跑未完成与失败的条目。
                 </p>
               </div>
             </details>
 
-            <details class="faq-item">
+            <details class="faq__item" data-reveal>
               <summary>页面右下角没有出现「获取图片」按钮？</summary>
-              <div class="faq-body">
+              <div class="faq__body">
                 <p>按顺序排查这几项：</p>
-                <ul>
+                <ul class="list list--tight">
                   <li>当前域名是否在支持列表里（面板与内容脚本只注入列表内的站点）。</li>
                   <li>在 <code>chrome://extensions</code> 里确认扩展已启用、没有报错。</li>
                   <li>刚装好或刚更新过扩展时，刷新一下目标页面。</li>
@@ -821,9 +660,9 @@
               </div>
             </details>
 
-            <details class="faq-item">
+            <details class="faq__item" data-reveal>
               <summary>支持 Edge、Firefox 或其它浏览器吗？</summary>
-              <div class="faq-body">
+              <div class="faq__body">
                 <p>
                   目前只针对 Chrome 开发与验证。其它 Chromium 内核浏览器（Edge、Brave 等）在
                   <code>chrome://extensions</code> 对应页面里大概率也能加载，但没有做过测试；Firefox
@@ -832,16 +671,13 @@
               </div>
             </details>
 
-            <details class="faq-item">
+            <details class="faq__item" data-reveal>
               <summary>点击下载按钮没有反应？</summary>
-              <div class="faq-body">
+              <div class="faq__body">
                 <p>可以这样处理：</p>
-                <ul>
+                <ul class="list list--tight">
                   <li>检查浏览器是否拦截了本站的自动下载，允许后重试。</li>
-                  <li>
-                    直接在地址栏打开相对地址
-                    <code>downloads/ImageGrab-v1.0.0.zip</code>。
-                  </li>
+                  <li>直接在地址栏打开相对地址 <code>downloads/ImageGrab-v1.0.0.zip</code>。</li>
                   <li>
                     如果是从 GitHub Pages 打开本站，请确认
                     <code>downloads</code> 目录已随站点一起发布。
@@ -852,99 +688,64 @@
           </div>
         </div>
       </section>
-
-      <!-- ══ 下载 ═════════════════════════════════════════════ -->
-      <section class="section" id="download">
-        <div class="wrap">
-          <div class="download">
-            <span class="eyebrow">下载</span>
-            <h2>下载图提取 ImageGrab</h2>
-            <p>
-              下载后解压 ZIP，在 <code>chrome://extensions</code> 打开「开发者模式」，点击「加载已解压的扩展程序」，选中解压出来的文件夹即可。
-            </p>
-
-            <div class="download__actions">
-              <a class="btn btn--primary" href="downloads/ImageGrab-v1.0.0.zip" download data-zip>
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M12 3v12" />
-                  <path d="M7.5 10.5L12 15l4.5-4.5" />
-                  <path d="M4.5 19.5h15" />
-                </svg>
-                <span data-zip-label>下载插件 v1.0.0</span>
-              </a>
-              <a class="btn btn--ghost" href="#install">
-                再读一遍安装步骤
-                <span class="btn__arrow" aria-hidden="true">→</span>
-              </a>
-            </div>
-
-            <div class="download__meta">
-              <span class="pill">版本 v1.0.0</span>
-              <span class="pill">ZIP 压缩包</span>
-              <span class="pill" data-zip-size hidden></span>
-              <span class="pill">需要 Chrome 116+</span>
-              <span class="pill">解压后加载，无需构建</span>
-            </div>
-
-            <p class="download__fallback" id="download-hint">
-              按钮是相对路径，直接下载本站目录下的 <code>downloads/ImageGrab-v1.0.0.zip</code>。
-            </p>
-          </div>
-        </div>
-      </section>
     </main>
 
-    <!-- ══ 页脚 ═══════════════════════════════════════════════ -->
+    <!-- ══ 页脚 ═════════════════════════════════════════════ -->
     <footer class="site-footer">
       <div class="wrap">
         <div class="site-footer__grid">
-          <div>
-            <div class="site-footer__brand">
-              <img src="assets/icons/icon48.png" alt="" width="28" height="28" />
-              图提取 ImageGrab
+          <div class="site-footer__brand">
+            <img src="assets/icons/icon48.png" alt="" width="28" height="28" />
+            <div>
+              <span class="site-footer__name">图提取 ImageGrab</span>
+              <span class="site-footer__version">v1.0.0 · Manifest V3</span>
             </div>
-            <p>
-              纯原生 HTML / CSS / JavaScript 实现的 Manifest V3
-              扩展：零依赖、零构建，图片只在本机处理，不上传任何数据。
-            </p>
           </div>
 
-          <div>
+          <nav class="site-footer__nav" aria-label="页脚导航">
             <h3>本页导航</h3>
             <ul>
-              <li><a href="#interface">界面展示</a></li>
-              <li><a href="#features">核心功能</a></li>
-              <li><a href="#sites">支持的网站</a></li>
-              <li><a href="#install">安装步骤</a></li>
-              <li><a href="#usage">使用步骤</a></li>
+              <li><a href="#features">功能介绍</a></li>
+              <li><a href="#usage">使用方法</a></li>
+              <li><a href="#install">安装说明</a></li>
               <li><a href="#faq">常见问题</a></li>
               <li><a href="#download">下载插件</a></li>
             </ul>
-          </div>
+          </nav>
 
-          <div>
-            <h3>随源码提供的文档</h3>
+          <nav class="site-footer__nav" aria-label="源码与文档">
+            <h3>源码与文档</h3>
             <ul>
+              <li>
+                <a href="https://github.com/juice0369/cursorwork">
+                  GitHub 仓库
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M14 5h5v5" />
+                    <path d="M19 5l-8 8" />
+                    <path d="M18 14.5V18a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2h3.5" />
+                  </svg>
+                </a>
+              </li>
               <li><code>README.md</code> — 功能说明与开发约定</li>
               <li><code>docs/troubleshooting.md</code> — 排障手册</li>
               <li><code>docs/testing.md</code> — 测试与本地验证</li>
             </ul>
-          </div>
+          </nav>
         </div>
 
         <div class="site-footer__bottom">
-          <span>仅供学习与个人使用。请遵守目标网站的服务条款与著作权要求。</span>
-          <span>© <span data-year>2026</span> 图提取 ImageGrab</span>
+          <p>© <span data-year>2026</span> 图提取 ImageGrab · 免费使用</p>
+          <p>仅供学习与个人使用。请遵守目标网站的服务条款与著作权要求。</p>
         </div>
       </div>
     </footer>
