@@ -27,12 +27,20 @@
 
     <section id="toolbar" class="toolbar" hidden>
       <div class="toolbar-group">
-        <button id="btn-select-all" class="btn" type="button">全选</button>
-        <button id="btn-invert" class="btn" type="button">反选</button>
+        <button id="btn-select-all" class="btn" type="button" title="只勾选可下载的图片；被过滤的要手动勾选，或把「范围」切到「只看被过滤」再全选">全选</button>
+        <button id="btn-invert" class="btn" type="button" title="在可下载的图片之间反选（「范围」为「只看被过滤」时作用于被过滤的条目）">反选</button>
         <button id="btn-select-none" class="btn" type="button">取消选择</button>
         <button id="btn-select-failed" class="btn" type="button">选中失败项</button>
       </div>
       <div class="toolbar-group toolbar-filters">
+        <label class="field">
+          <span>范围</span>
+          <select id="filter-scope">
+            <option value="all">全部（含被过滤）</option>
+            <option value="kept">只看可下载</option>
+            <option value="filtered">只看被过滤</option>
+          </select>
+        </label>
         <label class="field">
           <span>尺寸</span>
           <select id="filter-size">

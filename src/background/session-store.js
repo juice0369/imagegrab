@@ -6,10 +6,13 @@
  * {
  *   sid, pageUrl, pageTitle, platformId, platformName,
  *   createdAt, updatedAt, sourceTabId, sourceAlive, resultsTabIds: [],
- *   settings, filterStats,
+ *   settings, filterStats, downloadSequence,
  *   images: [ { id, url, rawUrl, source, kind, ext, domWidth, domHeight, naturalWidth, naturalHeight, alt, alternates } ],
- *   jobs: { [jobId]: { id, status, createdAt, finishedAt, stats, itemStatus: { [itemId]: {...} } } }
+ *   jobs: { [jobId]: { id, status, createdAt, finishedAt, stats, nextSequence, itemStatus: { [itemId]: {...} } } }
  * }
+ *
+ * `downloadSequence` 是「下一个文件名编号」的游标（1 起），让同一会话里的多批下载连着编号
+ * （001…003、004…005），而不是每批都从 001 重来撞名成「商品图_001 (1).png」。
  */
 
 import { STORAGE_KEYS, SESSION_LIMITS, JOB_STATUS } from '../shared/constants.js';
@@ -75,6 +78,7 @@ function publicJob(job) {
     createdAt: job.createdAt,
     finishedAt: job.finishedAt || null,
     stats: job.stats,
+    nextSequence: job.nextSequence || 1,
     itemStatus: job.itemStatus
   };
 }

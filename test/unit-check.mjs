@@ -313,6 +313,39 @@ eq('子目录被保留', urlUtils.joinDownloadPath('ImageGrab/', 'x.png'), 'Imag
 eq('上跳目录被清理，且不产生前导斜杠', urlUtils.joinDownloadPath('../etc', 'x.png'), 'etc/x.png');
 eq('Windows 风格上跳目录同样清理', urlUtils.joinDownloadPath('..\\..\\win', 'x.png'), 'win/x.png');
 
+/* 文件名编号：同一个会话里必须连续（001…003、004…005），不能每批都从 001 重来 */
+
+group('文件名编号连续递增');
+const firstBatch = urlUtils.assignSequences(['a', 'b', 'c'], 1);
+eq('第一批从 001 开始', firstBatch.byId.get('a'), 1);
+eq('批内按列表顺序递增', firstBatch.byId.get('c'), 3);
+eq('第一批之后的游标是 4', firstBatch.next, 4);
+
+const secondBatch = urlUtils.assignSequences(['d', 'e'], firstBatch.next);
+eq('第二批接着上一批编号（不会又回到 1）', secondBatch.byId.get('d'), 4);
+eq('第二批最后一个编号', secondBatch.byId.get('e'), 5);
+eq('第二批之后的游标是 6', secondBatch.next, 6);
+eq(
+  '两批拼起来的文件名是 001—005，没有重名',
+  [...firstBatch.byId.values(), ...secondBatch.byId.values()]
+    .map((index) => urlUtils.buildFilename(index, 'png', {}))
+    .join(','),
+  '商品图_001.png,商品图_002.png,商品图_003.png,商品图_004.png,商品图_005.png'
+);
+
+const single = urlUtils.assignSequences(['x'], secondBatch.next);
+eq('单张下载也接着编号', single.byId.get('x'), 6);
+eq('单张下载不占用多余编号', single.next, 7);
+
+const emptyBatch = urlUtils.assignSequences([], 7);
+eq('空批次不推进游标', emptyBatch.next, 7);
+eq('空批次没有编号', emptyBatch.byId.size, 0);
+
+const badCursor = urlUtils.assignSequences(['a'], 0);
+eq('游标非法（0）时回到 1', badCursor.byId.get('a'), 1);
+eq('游标非数字时回到 1', urlUtils.assignSequences(['a'], Number.NaN).byId.get('a'), 1);
+eq('游标为字符串数字时按数字处理', urlUtils.assignSequences(['a'], '12').byId.get('a'), 12);
+
 /* ────────────────────── 6. 平台与详情页判定 ────────────────────── */
 
 group('平台与详情页判定');
@@ -339,14 +372,19 @@ const notDetailCases = [
   'https://mobile.yangkeduo.com/index.html'
 ];
 for (const href of notDetailCases) {
-  eq(`首页/搜索页不注入 ${href}`, platformRules.getPageState(href).isDetail, false);
+  const state = platformRules.getPageState(href);
+  // 首页 / 搜索页也注入按钮（页面类型只影响提示），所以「受支持」必须为 true
+  eq(`首页/搜索页也注入 ${href}`, state.supported, true);
+  eq(`首页/搜索页不当作详情页 ${href}`, state.isDetail, false);
+  ok(`首页/搜索页给出提示文案 ${href}`, typeof state.pageHint === 'string' && state.pageHint.length > 0);
 }
 
 eq('未知站点不受支持', platformRules.getPageState('https://example.com/goods.html?goods_id=1').supported, false);
 eq('file:// 不受支持', platformRules.getPageState('file:///C:/x.html').supported, false);
+eq('未知站点没有提示文案', platformRules.getPageState('https://example.com/').pageHint, '');
 const forced = platformRules.getPageState('https://www.taobao.com/?imagegrab=1');
-eq('imagegrab=1 强制注入', forced.isDetail, true);
-eq('强制注入会被标记', forced.forced, true);
+eq('imagegrab=1 强制标记为详情页', forced.isDetail, true);
+eq('强制标记会被记下来', forced.forced, true);
 
 /* ─────────────────────────── 7. 过滤规则 ─────────────────────────── */
 
@@ -403,6 +441,76 @@ eq('展示尺寸过小被过滤', runFilter([record({ rawUrl: 'https://img.alicd
 
 const described = imageFilter.describeFilterStats(dup.stats, constants.FILTER_REASONS);
 ok('过滤统计有人话描述', described.includes('扫描到') && described.includes('保留'));
+
+/* ───────── 7.1 被过滤的条目也要能显示（灰色卡片 + 过滤原因） ───────── */
+
+group('被过滤的条目也要列出');
+const contextDrop = runFilter([record({ rawUrl: 'https://img.alicdn.com/nav/logo.png', decorationAncestor: 'footer' })]);
+eq('装饰区域内的图片被列出', contextDrop.filtered.length, 1);
+eq('列出时带上过滤原因', contextDrop.filtered[0]?.filterReason, 'context');
+eq('列出的地址就是页面上的地址', contextDrop.filtered[0]?.url, 'https://img.alicdn.com/nav/logo.png');
+eq('列出的条目也是可下载结构（有 ext / source）', Boolean(contextDrop.filtered[0]?.ext && contextDrop.filtered[0]?.source), true);
+eq('可下载列表依然为空', contextDrop.items.length, 0);
+eq('统计里记录了列出数量', contextDrop.stats.listed, 1);
+
+const tinyDrop = runFilter([record({ naturalWidth: 90, naturalHeight: 90 })]);
+eq('尺寸过小的条目被列出', tinyDrop.filtered[0]?.filterReason, 'tiny');
+eq('尺寸信息被保留（结果页要显示它）', tinyDrop.filtered[0]?.naturalWidth, 90);
+
+const aspectDrop = runFilter([record({ naturalWidth: 1400, naturalHeight: 200 })]);
+eq('长宽比异常的条目被列出', aspectDrop.filtered[0]?.filterReason, 'aspect');
+
+const urlDrop = runFilter([record({ rawUrl: 'https://img.alicdn.com/logo/site-2x.png' })]);
+eq('命中黑名单的条目被列出', urlDrop.filtered[0]?.filterReason, 'url');
+
+// 重复条目要指认它和哪一张重复，结果页才能写出「与第 N 张相同」
+const dupPair = runFilter([record({}), record({})]);
+eq('重复条目被列出', dupPair.filtered[0]?.filterReason, 'duplicate');
+eq('重复条目指认了保留的那一张', dupPair.filtered[0]?.duplicateOf, dupPair.items[0]?.id);
+
+// 地址无效的条目没有可显示的地址，只能计数、不能列卡片
+const invalidDrop = runFilter([record({ rawUrl: 'javascript:void(0)' })]);
+eq('无效地址不列卡片', invalidDrop.filtered.length, 0);
+eq('无效地址仍然计数', invalidDrop.stats.reasons.invalid, 1);
+eq('列出数量与 filtered 长度一致', invalidDrop.stats.listed, invalidDrop.filtered.length);
+
+// data: 占位图是可显示的（结果页会显示成 1×1 的小图，尺寸文字会说明）
+const dataDrop = runFilter([record({ rawUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' })]);
+eq('data: 占位图被列出', dataDrop.filtered[0]?.filterReason, 'data');
+eq('data: 条目的扩展名能被识别', dataDrop.filtered[0]?.ext, 'gif');
+
+// 未过滤的图片必须保持原编号，下载文件名才不会因为「多列了被过滤的卡片」而错位
+const numbering = runFilter([
+  record({ rawUrl: 'https://img.alicdn.com/goods/keep-1.jpg' }),
+  record({ rawUrl: 'https://img.alicdn.com/goods/tiny-1.jpg', naturalWidth: 50, naturalHeight: 50 }),
+  record({ rawUrl: 'https://img.alicdn.com/goods/keep-2.jpg' })
+]);
+eq('保留的条目仍是 1、2 号', `${numbering.items[0].id},${numbering.items[1].id}`, 'img_1,img_2');
+eq('被过滤的条目拿到独立 id', numbering.filtered[0]?.id, 'img_3');
+const allIds = [...numbering.items, ...numbering.filtered].map((item) => item.id);
+eq('两类条目的 id 不重复', new Set(allIds).size, allIds.length);
+
+// 每个被列出的原因都必须有中文说明与短标签，否则卡片上会露出英文键名
+const listedReasons = [
+  ...contextDrop.filtered,
+  ...tinyDrop.filtered,
+  ...aspectDrop.filtered,
+  ...urlDrop.filtered,
+  ...dupPair.filtered,
+  ...dataDrop.filtered
+].map((item) => item.filterReason);
+ok('列出的原因都有中文说明', listedReasons.every((reason) => Boolean(constants.FILTER_REASONS[reason])));
+ok('列出的原因都有短标签', listedReasons.every((reason) => Boolean(constants.FILTER_REASON_SHORT[reason])));
+
+const capped = runFilter(
+  Array.from({ length: 5 }, (_, index) => record({ rawUrl: `https://img.alicdn.com/icons/x${index}.png`, naturalWidth: 40, naturalHeight: 40 })),
+  { settings: { ...constants.DEFAULT_SETTINGS, maxFilteredImages: 2 } }
+);
+eq('列出的被过滤条目有上限', capped.filtered.length, 2);
+eq('超出的部分被记为未列出', capped.stats.filteredTruncated, 3);
+
+const statsText = imageFilter.describeFilterStats(contextDrop.stats, constants.FILTER_REASONS);
+ok('统计文案会说明被过滤的也列出来了', statsText.includes('也列在结果页里'));
 
 /* ────────────────────── 8. 文案与状态完整性 ────────────────────── */
 

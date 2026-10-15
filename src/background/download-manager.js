@@ -13,7 +13,7 @@
 
 import { ITEM_STATUS, JOB_STATUS, MSG, PORT_PUSH, ERROR_CODES, DEFAULT_SETTINGS, describeError } from '../shared/constants.js';
 import { createLogger } from '../shared/logger.js';
-import { buildFilename, joinDownloadPath, randomId } from '../shared/url-utils.js';
+import { assignSequences, buildFilename, joinDownloadPath, randomId } from '../shared/url-utils.js';
 import { sendTabMessage } from '../shared/messaging.js';
 import { blobFromBytes, convertRemote, revokeBlob } from './offscreen-manager.js';
 import { sessionStore } from './session-store.js';
@@ -31,7 +31,7 @@ const activeJobs = new Map();
 
 /* ───────────────────────────── 任务对象 ───────────────────────────── */
 
-function createJob({ sid, ids, settings }) {
+function createJob({ sid, ids, settings, nextSequence = 1 }) {
   const job = {
     id: randomId('job'),
     sid,
@@ -43,6 +43,8 @@ function createJob({ sid, ids, settings }) {
     items: new Map(),
     blobUrls: new Set(),
     cancelled: false,
+    /** 这一批用完之后的下一个编号，结果页用它显示「下一个文件名」 */
+    nextSequence,
     stats: { total: ids.length, processed: 0, succeeded: 0, failed: 0, fallback: 0, cancelled: 0 },
     settings
   };
@@ -79,6 +81,7 @@ export function jobSnapshot(job) {
     createdAt: job.createdAt,
     finishedAt: job.finishedAt || null,
     stats: { ...job.stats },
+    nextSequence: job.nextSequence || 1,
     itemStatus: itemStatusObject(job)
   };
 }
@@ -397,13 +400,25 @@ async function worker(ctx) {
 
 /**
  * 启动一批下载。
+ *
+ * 文件名编号在同一个会话里**连续递增**：先下 3 张、再下 2 张，得到 `商品图_001~003.png` 与
+ * `商品图_004~005.png`；每批都从 001 重来会撞名成「商品图_001 (1).png」，看着像没按顺序编号。
+ * 批内顺序与结果页列表顺序一致（结果页传进来的 ids 就是列表顺序）。
+ *
  * @param {{session: object, ids: string[], emit: (event: object) => void}} options
  * @returns {Promise<object>} 任务快照
  */
 export async function startDownload({ session, ids, emit }) {
   const settings = { ...DEFAULT_SETTINGS, ...session.settings };
-  const job = createJob({ sid: session.sid, ids, settings });
-  const sequenceById = new Map(ids.map((id, index) => [id, index + 1]));
+  // 编号从会话游标接着往下排（同一批内顺序 = 结果页列表顺序）
+  const { byId: sequenceById, next: nextSequence } = assignSequences(ids, session.downloadSequence);
+  const job = createJob({ sid: session.sid, ids, settings, nextSequence });
+
+  // 游标写回会话：这一批结束后下一批接着往后编号，刷新结果页也不会回退
+  session.downloadSequence = nextSequence;
+  sessionStore
+    .update(session.sid, { downloadSequence: nextSequence })
+    .catch((err) => log.debug('保存文件名编号游标失败', err));
 
   let flushTimer = null;
   let lastFlush = 0;

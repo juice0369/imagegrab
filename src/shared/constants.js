@@ -164,6 +164,17 @@ export const FILTER_REASONS = Object.freeze({
   duplicate: '与其它图片重复'
 });
 
+/** 过滤原因的短标签：结果页卡片上的徽标用，太长的说明放在卡片正文里。 */
+export const FILTER_REASON_SHORT = Object.freeze({
+  invalid: '地址无效',
+  data: '占位图',
+  url: '图标/广告',
+  context: '装饰区域',
+  tiny: '尺寸过小',
+  aspect: '长宽比异常',
+  duplicate: '重复'
+});
+
 /** 默认设置。结果页展示的编号、并发数、过滤阈值都来自这里。 */
 export const DEFAULT_SETTINGS = Object.freeze({
   // 提取阶段的过滤阈值
@@ -172,6 +183,14 @@ export const DEFAULT_SETTINGS = Object.freeze({
   minDisplaySize: 60,
   maxAspectRatio: 5,
   maxImages: 500,
+  /**
+   * 被过滤掉的图片也要在结果页里列出来（灰色卡片 + 过滤原因，默认不勾选）。
+   *
+   * 这是「宁可多列、不要悄悄丢」的选择：尺寸偏小、位于装饰区域、与别处重复的地址
+   * 常常是误判，用户能看见才有机会手动选出来下载。上限与 maxImages 一致，
+   * 避免一个满是图标的长页面把会话数据撑爆。
+   */
+  maxFilteredImages: 500,
   dedupe: true,
   // 懒加载预热
   autoScroll: true,

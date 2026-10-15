@@ -31,9 +31,9 @@ await ImageGrabDebug.destroy(sid) // 手工回收某个会话
 
 ## 2. 按钮不出现
 
-1. 确认 URL 属于支持的平台，**并且**是商品详情页（首页、搜索页、购物车都不会注入，这是设计如此）。
-2. 平台与详情页判定都在 `src/content/platform-rules.js` 的 `PLATFORMS` 表里（`hostPattern` 判域名、`isDetailPage` 判详情页）。站点改版导致 URL 形态变化时，改这两个字段即可。
-3. 应急开关：在地址后面加 `?imagegrab=1`（或 `#imagegrab=1`）会强制注入，面板日志里会打印「通过 URL 参数强制注入」。
+1. 确认 URL 属于支持的平台域名：支持的域名下**所有页面**都会注入（首页、搜索页、列表页、详情页）。不在支持列表里的站点不注入，这是设计如此。
+2. 域名匹配在 `src/content/platform-rules.js` 的 `PLATFORMS` 表里（`hostPattern`）、以及 `manifest.json` 的 `content_scripts.matches` + `web_accessible_resources.matches`。**三处都要有**：只改 `hostPattern` 而没改 `matches`，脚本根本不会注入；只改 `matches` 而没改 `hostPattern`，脚本注入了但认不出平台。
+3. `isDetailPage`（商品详情页判定）**不影响按钮是否出现**，只影响按钮悬停提示与面板里的页面类型说明。加 `?imagegrab=1`（或 `#imagegrab=1`）会把当前页标记成详情页，日志里打印「通过 URL 参数强制标记为详情页（imagegrab=1）」。
 4. 内容脚本以 `run_at: document_idle` 注入，页面刚打开就去看可能还没执行，等一秒或刷新。
 5. 打开 `chrome://extensions`，看扩展卡片上是否有「错误」按钮。若清单引用的文件缺失或内容脚本有语法错误，浏览器会直接不注入。
 6. 页面是 `file://` 打开的吗？`matches` 里只有 `http` / `https`，`file://` 不会注入（本地测试页请用 HTTP 服务器打开）。
@@ -59,6 +59,10 @@ await ImageGrabDebug.destroy(sid) // 手工回收某个会话
 | `aspect` | 长宽比异常（细长条） | `constants.js` 的 `maxAspectRatio` |
 | `duplicate` | 与已保留的图片重复 | `constants.js` 的 `dedupe` |
 
+判定顺序（一条记录只记**第一个**命中的原因）：`invalid` → `data` → `context` → `url` → `tiny` → `aspect` → `duplicate`。装饰区域排在 URL 黑名单之前，因为「这张图在页头 / 页脚 / 导航里」是直接读到的 DOM 事实，比「文件名里带 logo」这类关键字更可信——footer 里的 `nav/logo.png` 会记成 `context`。想看别的顺序就调 `image-filter.js` 里这几个判断的先后（`test/unit-check.mjs` 的「被过滤的条目也要列出」分组盯着这一条）。
+
+被过滤的条目**不会悄悄消失**：结果页会用灰色虚线卡片把它们列出来（默认不勾选、徽标写短标签、正文写完整原因，重复的会写明与第几张相同），误判的可以手动勾选下载。单次最多列出 `DEFAULT_SETTINGS.maxFilteredImages`（默认 500）张，超出的部分只在提示条的统计里计数——面板与结果页都会写明「另有 N 张没有列出来」。`invalid` 地址无法显示，只计数。
+
 其它常见原因：
 
 1. **懒加载没触发**：确认面板上的「扫描前自动滚动」是勾选状态（默认勾选，存在 `chrome.storage.local` 的 `ig:settings`；默认值见 `DEFAULT_SETTINGS.autoScroll`）。也可以点按钮前手动把页面滚到底再回来。
@@ -72,7 +76,7 @@ await ImageGrabDebug.destroy(sid) // 手工回收某个会话
 1. `DECORATION_ANCESTOR_SELECTOR` 只覆盖常见的容器选择器模式，站点容器类名千奇百怪。找到目标图片的容器类名后补进该选择器即可。
 2. 注意：**装饰区域判定对所有尺寸的图片都生效**，没有“大图豁免”。如果某张商品主图恰好位于 `class` 含 `icon` 之类的容器里，会被误杀——这时应从选择器里去掉对应模式，或改宽 `URL_BLOCKLIST`。
 3. 水印、二维码这类图通常直接出现在商品图容器里，需要手工取消勾选，或在 `URL_BLOCKLIST` 里按地址特征加规则（例如 `/qrcode/i`、`/watermark/i` 已默认包含）。
-4. **结果页卡片数远多于提示条里的「保留 N 张」**：这不是提取多了，而是网格分片渲染把同一批条目重复挂进了容器——`grid.js` 的 `batchRanges`（每批 60 张）如果步长写错，卡片数会变成 n + (n-1) + … 的三角级放大（59 条能膨胀成上千张卡片，越靠前的图重复越多）。修好后卡片数恒等于图片条目数，`node test/unit-check.mjs` 的分片断言会盯住这一点。
+4. **结果页卡片数远多于提示条里的「保留 N 张」**：先看「范围」下拉——默认是「全部（含被过滤）」，卡片数 = 可下载的 + 被过滤的，这是正常的。切到「只看可下载」后如果卡片数仍多于「保留 N 张」，那是网格分片渲染把同一批条目重复挂进了容器——`grid.js` 的 `batchRanges`（每批 60 张）如果步长写错，卡片数会变成 n + (n-1) + … 的三角级放大（59 条能膨胀成上千张卡片，越靠前的图重复越多）。修好后卡片数恒等于图片条目数，`node test/unit-check.mjs` 的分片断言会盯住这一点。
 
 ## 6. 结果页提示「会话数据已过期」
 
@@ -147,16 +151,17 @@ await ImageGrabDebug.destroy(sid) // 手工回收某个会话
 
 ## 10. 下载的文件名不对
 
-1. 形如 `商品图_001 (1).png`：下载目录已存在同名文件，Chrome 按 `conflictAction: 'uniquify'` 自动加序号（有意设计，绝不覆盖用户文件）。
-2. 编号与结果页列表顺序一致；列表被排序或筛选后，编号按当前顺序重新生成。
-3. 前缀与补零位数在 `src/shared/constants.js` 的 `DEFAULT_SETTINGS.filenamePrefix` / `filenamePad`；也可以在 `subfolder` 里指定下载子目录（会自动丢掉 `..`，避免路径穿越）。
+1. 编号从 `001` 开始、在**同一个会话里连续递增**：下过 14 张后再下 2 张，得到 `015`、`016`。游标存在会话的 `downloadSequence` 里（`startDownload` 用 `assignSequences()` 分配，下一批接着排）。结果页顶部的「下一个文件名」就是当前游标。
+2. 出现 `商品图_001 (1).png`：说明这个编号在下载目录里已经存在。常见原因：重新提取（新会话，编号从 `001` 重来）、或重复勾同一张又下一次。Chrome 按 `conflictAction: 'uniquify'` 加序号，绝不覆盖用户文件。
+3. 批内顺序 = 结果页列表顺序；列表被排序或筛选后，编号按当前顺序重新生成。
+4. 前缀与补零位数在 `src/shared/constants.js` 的 `DEFAULT_SETTINGS.filenamePrefix` / `filenamePad`；也可以在 `subfolder` 里指定下载子目录（会自动丢掉 `..`，避免路径穿越）。
 
 ## 11. 平台改版后的 5 分钟排查
 
-站点改版通常只影响两件事：**详情页 URL 判定**与**缩略图地址还原规则**。
+站点改版通常只影响两件事：**域名匹配**与**缩略图地址还原规则**。
 
-1. **确认平台识别**：看页面控制台日志 `[ImageGrab][panel] … 平台：xxx`。显示「未识别」说明 `PLATFORMS` 里的 `hostPattern` 没匹配上。
-2. **确认详情页判定**：平台对但按钮不出现，说明 `isDetailPage` 失败。对比当前 URL 与正则，按新形态调整（例如详情页从 `/item.htm?id=` 变成 `/detail/<id>`）。
+1. **确认平台识别**：看页面控制台日志 `[ImageGrab][panel] … 平台：xxx`。显示「未识别」说明 `PLATFORMS` 里的 `hostPattern`（以及 `manifest.json` 的 `matches`）没匹配上新域名。
+2. **确认页面类型提示**：按钮在但提示写着「不是商品详情页」，说明 `isDetailPage` 没匹配上——这**不影响提取**，只影响提示文案。详情页 URL 换形态时按新形态调整正则即可（例如详情页从 `/item.htm?id=` 变成 `/detail/<id>`）。
 3. **确认原图还原**：抽一张缩略图地址，在 `node` 里验证：
    ```bash
    node -e "import('./src/shared/url-utils.js').then(m=>console.log(m.restoreOriginalUrl(process.argv[1], m.getOriginalRules('taobao'))))" "https://img.alicdn.com/xxx.jpg_400x400.jpg"

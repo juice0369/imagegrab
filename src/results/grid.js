@@ -10,7 +10,7 @@
  * 就直接让每张缩略图都发一次请求，保证页面上每张图都真的显示出来。
  */
 
-import { ITEM_STATUS, ITEM_STATUS_LABEL, describeError } from '../shared/constants.js';
+import { ITEM_STATUS, ITEM_STATUS_LABEL, FILTER_REASON_SHORT, describeError } from '../shared/constants.js';
 
 const BATCH_SIZE = 60;
 
@@ -72,6 +72,8 @@ export function createGrid({ container: initialContainer = null, onAction }) {
     card.dataset.id = item.id;
     card.dataset.status = info.status || ITEM_STATUS.PENDING;
     card.dataset.selected = selectedInfo(item.id) ? 'true' : 'false';
+    // 被过滤的条目单独标记：样式上灰一层，和可下载的卡片区分开
+    if (item.filterReason) card.dataset.filtered = 'true';
 
     card.innerHTML = `
       <div class="card-top">
@@ -165,8 +167,14 @@ export function createGrid({ container: initialContainer = null, onAction }) {
     card.dataset.selected = selectedInfo(itemId) ? 'true' : 'false';
 
     const pill = card.querySelector('.pill');
-    pill.textContent = ITEM_STATUS_LABEL[status] || status;
+    const filtered = Boolean(item?.filterReason);
+    // 被过滤的卡片徽标直接写原因，用户一眼就知道「这张为什么没被勾选」
+    pill.textContent = filtered
+      ? `已过滤 · ${FILTER_REASON_SHORT[item.filterReason] || item.filterReason}`
+      : ITEM_STATUS_LABEL[status] || status;
     pill.dataset.status = status;
+    if (filtered) pill.dataset.filtered = 'true';
+    else delete pill.dataset.filtered;
 
     const checkbox = card.querySelector('.card-check');
     if (checkbox.checked !== selectedInfo(itemId)) checkbox.checked = selectedInfo(itemId);
@@ -193,6 +201,12 @@ export function createGrid({ container: initialContainer = null, onAction }) {
       errEl.hidden = !detail;
       errEl.style.color = 'var(--text-dim)';
       errEl.textContent = detail;
+    } else if (filtered) {
+      // 被过滤但还没动过：把过滤原因完整写出来（徽标上是短标签）
+      const note = onAction('filter-note', itemId) || '';
+      errEl.hidden = !note;
+      errEl.style.color = 'var(--text-dim)';
+      errEl.textContent = note;
     } else {
       errEl.hidden = true;
     }

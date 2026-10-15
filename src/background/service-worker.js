@@ -314,11 +314,12 @@ async function buildState(sid) {
   return { session: publicSession(session), job };
 }
 
-/** 计算「继续下载」需要重跑的条目：没成功、也不是原格式降级过的。 */
+/** 计算「继续下载」需要重跑的条目：没成功、也不是原格式降级过的，且不包含被过滤的条目。 */
 function pendingItemIds(session) {
   const job = latestJobOf(session);
   const statuses = job?.itemStatus || {};
   return (session.images || [])
+    .filter((item) => !item.filterReason)
     .filter((item) => {
       const status = statuses[item.id]?.status;
       return status !== ITEM_STATUS.DONE && status !== ITEM_STATUS.FALLBACK;

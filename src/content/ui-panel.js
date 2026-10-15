@@ -26,6 +26,10 @@ const state = {
   dead: false,
   sid: null,
   platform: null,
+  /** 当前页面是不是商品详情页（只影响提示文案：列表页/首页也会提取，只是图更杂） */
+  isDetail: false,
+  /** 当前页面类型的人话说明，鼠标悬停在按钮上能看到 */
+  pageHint: '',
   settings: { ...DEFAULT_SETTINGS },
   lastStats: null,
   lastCount: 0,
@@ -176,13 +180,20 @@ function syncPanel(reason) {
     return;
   }
   const page = getPageState();
-  if (!page.supported || !page.isDetail) {
-    if (state.mounted) log.info(`离开详情页（${reason}），移除面板`);
+  if (!page.supported) {
+    if (state.mounted) log.info(`离开支持站点（${reason}），移除面板`);
     teardown();
     return;
   }
+  const pageKindChanged = state.isDetail !== page.isDetail;
   state.platform = page.platform;
-  if (page.forced) log.info('通过 URL 参数强制注入（imagegrab=1）');
+  state.isDetail = page.isDetail;
+  state.pageHint = page.pageHint;
+  if (page.forced) log.info('通过 URL 参数强制标记为详情页（imagegrab=1）');
+  if (state.mounted && pageKindChanged) {
+    log.info(`页面类型变化（${reason}）：${page.pageHint}`);
+    applyPageHint();
+  }
   mount();
 }
 
@@ -281,6 +292,7 @@ function mount() {
   };
 
   applyPosition();
+  applyPageHint();
   injectCss(shadow);
 
   state.refs.autoscroll.checked = state.settings.autoScroll !== false;
@@ -302,6 +314,13 @@ function mount() {
 
   // 页面已经存在过一次会话时，把徽标恢复出来
   if (state.lastCount) renderBadge(state.lastCount);
+}
+
+/** 把当前页面类型写到按钮的悬停提示上：详情页与列表页的区别只在提示，不拦提取。 */
+function applyPageHint() {
+  const { fab } = state.refs;
+  if (!fab) return;
+  fab.title = state.pageHint ? `提取当前页面的图片 · ${state.pageHint}` : '提取当前页面的图片';
 }
 
 async function injectCss(shadow) {
@@ -498,10 +517,12 @@ async function runExtraction() {
       }
     });
 
-    const { items, stats } = filterRecords(records, { settings, platformId: state.platform?.id || 'default' });
+    const { items, filtered, stats } = filterRecords(records, { settings, platformId: state.platform?.id || 'default' });
     state.lastStats = stats;
 
-    if (!items.length) {
+    // 一张可下载的都没有：如果连被过滤的条目也没有，就没必要开结果页，面板说清原因即可；
+    // 有被过滤的条目时照样开结果页——用户正是要靠那些灰色卡片（缩略图 + 原因）来判断是误判还是真装饰图。
+    if (!items.length && !filtered.length) {
       setCard({
         title: '没有找到可提取的图片',
         text: describeFilterStats(stats, FILTER_REASONS),
@@ -512,6 +533,10 @@ async function runExtraction() {
       return;
     }
 
+    // 被过滤的条目也一并送过去：结果页会把它们灰着列出来（默认不勾选），
+    // 「少了哪些、为什么少」就能在同一个页面里核对，不用来回切。
+    const reportImages = [...items, ...filtered];
+
     const sid = createSid();
     const payload = {
       sid,
@@ -519,7 +544,7 @@ async function runExtraction() {
       pageTitle: document.title || '',
       platformId: state.platform?.id || 'default',
       platformName: state.platform?.name || '未知站点',
-      images: items,
+      images: reportImages,
       filterStats: stats,
       settings: {
         filenamePrefix: settings.filenamePrefix,
@@ -538,18 +563,19 @@ async function runExtraction() {
     }
 
     state.sid = sid;
-    state.lastCount = items.length;
-    renderBadge(items.length);
+    state.lastCount = reportImages.length;
+    renderBadge(reportImages.length);
 
     const notLoaded = items.filter((item) => !item.naturalWidth).length;
-    const notes = [];
-    if (stats.dropped) notes.push(`已过滤 ${stats.dropped} 张`);
+    const notes = [items.length ? `可下载 ${items.length} 张` : '没有一张通过过滤规则'];
+    if (!state.isDetail) notes.push('当前页面不是商品详情页，提取的是整页可见图片');
+    if (filtered.length) notes.push(`另有 ${filtered.length} 张被过滤的也列在结果页里（灰色卡片，默认不勾选）`);
     if (notLoaded) notes.push(`${notLoaded} 张是懒加载/背景图，尺寸会在结果页确认`);
 
     setCard({
-      title: `已提取 ${items.length} 张图片`,
-      text: notes.length ? `${notes.join('；')}。结果页已打开。` : '结果页已打开。',
-      tone: 'ok',
+      title: items.length ? `已提取 ${items.length} 张图片` : '没有找到可下载的图片',
+      text: `${notes.join('；')}。结果页已打开。`,
+      tone: items.length ? 'ok' : 'warn',
       showOpen: true,
       showRetry: true,
       details: buildReasonDetails(stats)

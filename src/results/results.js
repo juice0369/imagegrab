@@ -16,6 +16,7 @@ import {
 } from '../shared/constants.js';
 import { createLogger } from '../shared/logger.js';
 import { isContextInvalidated, isExtensionAlive } from '../shared/messaging.js';
+import { buildFilename } from '../shared/url-utils.js';
 import { sessionStore } from '../background/session-store.js';
 import { createGrid } from './grid.js';
 
@@ -42,7 +43,7 @@ const state = {
   job: null,
   selected: new Set(),
   itemStatus: {},
-  filters: { size: 'all', status: 'all' },
+  filters: { size: 'all', status: 'all', scope: 'all' },
   visible: [],
   thumbFailed: new Set(),
   port: null,
@@ -115,6 +116,7 @@ function cacheElements() {
     'btn-select-failed',
     'filter-size',
     'filter-status',
+    'filter-scope',
     'visible-count',
     'btn-download',
     'btn-resume',
@@ -141,14 +143,31 @@ function latestJobOf(session) {
   return jobs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
 }
 
-/** 默认勾选：没成功过、也没原格式降级过的图片。 */
+/** 默认勾选：没成功过、也没原格式降级过的图片；被过滤的条目要用户自己勾，避免误把图标也下载下来。 */
 function defaultSelection() {
   return (state.session?.images || [])
     .filter((item) => {
+      if (item.filterReason) return false;
       const status = state.itemStatus[item.id]?.status;
       return status !== ITEM_STATUS.DONE && status !== ITEM_STATUS.FALLBACK;
     })
     .map((item) => item.id);
+}
+
+/** 只计「可下载」的条目：被过滤的卡片不参与进度与「继续下载」的统计。 */
+function downloadableImages() {
+  return (state.session?.images || []).filter((item) => !item.filterReason);
+}
+
+function filteredImages() {
+  return (state.session?.images || []).filter((item) => Boolean(item.filterReason));
+}
+
+/** 可下载条目里的第几张（1 起）：用于「与第 N 张重复」这类说明。 */
+function keptOrdinalOf(itemId) {
+  if (!itemId) return 0;
+  const index = downloadableImages().findIndex((item) => item.id === itemId);
+  return index >= 0 ? index + 1 : 0;
 }
 
 /* ───────────────────── 长连接（results ↔ SW） ───────────────────── */
@@ -248,6 +267,7 @@ function onPortMessage(message) {
       mergeItemStatus(message.job?.itemStatus);
       updateCounts();
       updateRunbar();
+      renderSummary();
       return;
     }
 
@@ -260,6 +280,7 @@ function onPortMessage(message) {
       grid.refreshAll();
       updateCounts();
       updateRunbar();
+      renderSummary();
       renderNoticeForSummary(message.summary);
       return;
     }
@@ -347,19 +368,34 @@ function render() {
 function renderSummary() {
   const session = state.session;
   const images = session.images || [];
+  const kept = downloadableImages().length;
+  const filtered = images.length - kept;
   const created = session.createdAt ? new Date(session.createdAt).toLocaleString() : '';
-  const prefix = session.settings?.filenamePrefix || '商品图';
+  // 编号在同一个会话里连续递增，所以这里显示的是「下一张会叫什么」，
+  // 而不是固定的 001 —— 第二批下载不会又变成 001 (1)。
+  const nextSequence = nextFileNameSequence();
   els['session-summary'].textContent =
     `${session.platformName || '未知站点'} · 共 ${images.length} 张图片` +
+    `（可下载 ${kept} 张${filtered ? `，被过滤 ${filtered} 张` : ''}）` +
     `${session.pageTitle ? ` · ${truncate(session.pageTitle, 40)}` : ''}${created ? ` · ${created}` : ''}` +
-    ` · 文件名 ${prefix}_001.png`;
+    ` · 下一个文件名 ${buildFilename(nextSequence, 'png', session.settings || {})}`;
   els['footer-hint'].textContent = session.pageUrl ? `源页面：${session.pageUrl}` : '';
   els['btn-source'].hidden = !session.sourceTabId;
+}
+
+/** 下一个会用的文件名编号：优先用内存里任务的最新游标，其次用会话里持久化的。 */
+function nextFileNameSequence() {
+  const fromJob = Number(state.job?.nextSequence);
+  if (Number.isFinite(fromJob) && fromJob >= 1) return Math.round(fromJob);
+  const fromSession = Number(state.session?.downloadSequence);
+  if (Number.isFinite(fromSession) && fromSession >= 1) return Math.round(fromSession);
+  return 1;
 }
 
 function renderBanner() {
   const session = state.session;
   const stats = session.filterStats;
+  const listed = filteredImages().length;
   const lines = [];
 
   if (session.sourceAlive === false) {
@@ -370,6 +406,13 @@ function renderBanner() {
     lines.push(
       `扫描到 ${stats.scanned} 个图片地址，保留 ${stats.kept} 张` +
         (stats.dropped ? `，过滤掉 ${stats.dropped} 张。` : '。')
+    );
+  }
+
+  if (listed) {
+    lines.push(
+      `被过滤的 ${listed} 张也列在下面（灰色卡片，默认不勾选，卡片上标明了过滤原因），误判的可以手动勾选下载。` +
+        (stats && stats.filteredTruncated ? `另有 ${stats.filteredTruncated} 张超出单次列出上限，没有列出来。` : '')
     );
   }
 
@@ -407,15 +450,28 @@ function renderBanner() {
     details.appendChild(summary);
     const reasons = document.createElement('ul');
     reasons.className = 'reason-list';
+    // 每类原因顺带说明「有没有列出来」，避免用户数不到卡片时以为是丢了数据
+    const listedByReason = new Map();
+    for (const item of filteredImages()) {
+      listedByReason.set(item.filterReason, (listedByReason.get(item.filterReason) || 0) + 1);
+    }
     for (const [key, value] of Object.entries(stats.reasons || {})) {
       if (!value) continue;
       const li = document.createElement('li');
-      li.textContent = `${FILTER_REASONS[key] || key}：${value} 张`;
+      const shown = listedByReason.get(key) || 0;
+      li.textContent = `${FILTER_REASONS[key] || key}：${value} 张${
+        shown ? `（其中 ${shown} 张已列在下面）` : '（地址无法显示，没有列出）'
+      }`;
       reasons.appendChild(li);
     }
     if (stats.truncated) {
       const li = document.createElement('li');
       li.textContent = `超过单次提取上限，未保留：${stats.truncated} 张`;
+      reasons.appendChild(li);
+    }
+    if (stats.filteredTruncated) {
+      const li = document.createElement('li');
+      li.textContent = `被过滤的条目超出单次列出上限，未列出：${stats.filteredTruncated} 张`;
       reasons.appendChild(li);
     }
     if (!reasons.childElementCount) {
@@ -432,8 +488,12 @@ function computeVisible() {
   const images = state.session?.images || [];
   const sizeFilter = SIZE_FILTERS.find((entry) => entry.id === state.filters.size) || SIZE_FILTERS[0];
   const statusFilter = state.filters.status;
+  const scope = state.filters.scope;
 
   return images.filter((item) => {
+    // 范围：默认「全部」，也就是可下载的与被过滤的都在同一页里，用户随时能核对
+    if (scope === 'kept' && item.filterReason) return false;
+    if (scope === 'filtered' && !item.filterReason) return false;
     if (sizeFilter.min > 0) {
       const width = item.naturalWidth || item.domWidth || 0;
       const height = item.naturalHeight || item.domHeight || 0;
@@ -478,6 +538,13 @@ function handleGridAction(action, ...args) {
         renderBanner();
       }
       return undefined;
+    case 'filter-note': {
+      const item = (state.session?.images || []).find((candidate) => candidate.id === args[0]);
+      if (!item?.filterReason) return '';
+      const base = `已过滤：${FILTER_REASONS[item.filterReason] || item.filterReason}`;
+      const ordinal = item.filterReason === 'duplicate' ? keptOrdinalOf(item.duplicateOf) : 0;
+      return ordinal ? `${base}（与第 ${ordinal} 张相同）` : base;
+    }
     case 'resize':
       return undefined;
     default:
@@ -490,9 +557,12 @@ function updateCounts() {
   for (const id of [...state.selected]) {
     if (!imageIds.has(id)) state.selected.delete(id);
   }
-  els['visible-count'].textContent = `显示 ${state.visible.length} / ${imageIds.size}`;
+  const kept = downloadableImages();
+  const selectedKept = kept.filter((item) => state.selected.has(item.id)).length;
+  const extra = state.selected.size - selectedKept;
+  els['visible-count'].textContent = `显示 ${state.visible.length} / ${imageIds.size}（可下载 ${kept.length}）`;
   const button = els['btn-download'];
-  button.textContent = `下载选中（${state.selected.size}）`;
+  button.textContent = `下载选中（${state.selected.size}）${extra ? `，含 ${extra} 张被过滤的` : ''}`;
   button.disabled = state.selected.size === 0 || Boolean(runningJob());
 }
 
@@ -501,8 +571,18 @@ function runningJob() {
 }
 
 function countStatuses() {
-  const counts = { total: state.session?.images?.length || 0, done: 0, fallback: 0, failed: 0, cancelled: 0, pending: 0 };
-  for (const item of state.session?.images || []) {
+  // 只统计「可下载」的条目：被过滤的卡片默认不参与下载，混进来会让进度与「继续下载」的数字失真
+  const kept = downloadableImages();
+  const counts = {
+    total: kept.length,
+    filtered: filteredImages().length,
+    done: 0,
+    fallback: 0,
+    failed: 0,
+    cancelled: 0,
+    pending: 0
+  };
+  for (const item of kept) {
     const status = state.itemStatus[item.id]?.status || ITEM_STATUS.PENDING;
     if (status === ITEM_STATUS.DONE) counts.done += 1;
     else if (status === ITEM_STATUS.FALLBACK) counts.fallback += 1;
@@ -540,7 +620,17 @@ function updateRunbar() {
 
   els['progress-wrap'].hidden = true;
   if (processed === 0) {
-    setStatusline(state.session?.images?.length ? '尚未开始下载。勾选后点「下载选中」。' : '没有图片。');
+    if (counts.total) {
+      setStatusline(
+        `尚未开始下载。勾选后点「下载选中」${
+          counts.filtered ? `（另有 ${counts.filtered} 张被过滤的，需要在卡片上手动勾选）` : ''
+        }。`
+      );
+    } else if (counts.filtered) {
+      setStatusline(`没有一张通过过滤规则；被过滤的 ${counts.filtered} 张列在下面，认为判断错了可以手动勾选下载。`);
+    } else {
+      setStatusline('没有可下载的图片。');
+    }
     return;
   }
   setStatusline(
@@ -642,14 +732,26 @@ function showEmpty(kind) {
 
 /* ────────────────────────── 交互 ────────────────────────── */
 
+/**
+ * 「全选 / 反选」作用的对象。
+ *
+ * 默认只在「可下载」的条目里挑：被过滤的（图标、占位图、过小的图…）只列出来供核对，
+ * 要用户手动勾选，避免点一下「全选」就把上百个图标一起下载下来。
+ * 当「范围」切到「只看被过滤」时，列表里本来就只有被过滤的条目，这两个按钮自然作用在它们身上。
+ */
+function bulkTargets() {
+  if (state.filters.scope === 'filtered') return state.visible;
+  return state.visible.filter((item) => !item.filterReason);
+}
+
 function wireUi() {
   els['btn-select-all'].addEventListener('click', () => {
-    for (const item of state.visible) state.selected.add(item.id);
+    for (const item of bulkTargets()) state.selected.add(item.id);
     applySelection();
   });
 
   els['btn-invert'].addEventListener('click', () => {
-    for (const item of state.visible) {
+    for (const item of bulkTargets()) {
       if (state.selected.has(item.id)) state.selected.delete(item.id);
       else state.selected.add(item.id);
     }
@@ -682,6 +784,12 @@ function wireUi() {
 
   els['filter-status'].addEventListener('change', (event) => {
     state.filters.status = event.target.value;
+    renderGrid();
+    updateCounts();
+  });
+
+  els['filter-scope'].addEventListener('change', (event) => {
+    state.filters.scope = event.target.value;
     renderGrid();
     updateCounts();
   });

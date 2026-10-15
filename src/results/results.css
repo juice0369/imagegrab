@@ -376,6 +376,20 @@ body {
   background: var(--accent);
 }
 
+/* 被过滤的条目：徽标用中性色，卡片整体降饱和，一眼区别于可下载的卡片 */
+.card[data-filtered='true'] {
+  border-style: dashed;
+}
+
+.card[data-filtered='true'] .thumb img {
+  opacity: 0.55;
+  filter: grayscale(0.5);
+}
+
+.pill[data-filtered='true'] {
+  background: rgba(31, 36, 48, 0.42);
+}
+
 .thumb {
   position: relative;
   display: flex;

@@ -364,6 +364,24 @@ export function sanitizeFilename(name, fallback = 'file') {
   return cleaned || fallback;
 }
 
+/**
+ * 给一批待下载的条目分配文件名编号。
+ *
+ * 编号从 1 起、在同一个会话里**连续递增**：每批都从 1 重来的话，第二批就开始撞名，
+ * Chrome 会存成「商品图_001 (1).png」，看起来像没按顺序编号。所以游标（cursor）由调用方
+ * 从会话里带进来，返回的 `next` 就是下一批该用的起始编号。
+ *
+ * @param {string[]} ids 这一批的条目 id，顺序即结果页列表顺序
+ * @param {number} cursor 这一批的起始编号（默认 1）
+ * @returns {{byId: Map<string, number>, next: number}}
+ */
+export function assignSequences(ids = [], cursor = 1) {
+  const start = Math.max(1, Math.round(Number(cursor)) || 1);
+  const byId = new Map();
+  ids.forEach((id, index) => byId.set(id, start + index));
+  return { byId, next: start + ids.length };
+}
+
 /** 生成下载文件名：`商品图_001.png`。 */
 export function buildFilename(index, extension, settings) {
   const prefix = sanitizeFilename(settings?.filenamePrefix || '商品图', '商品图');
