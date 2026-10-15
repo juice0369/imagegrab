@@ -73,34 +73,34 @@
 
 ```
 g/
-├── manifest.json                MV3 清单：权限、内容脚本、结果页资源声明
-├── assets/icons/                扩展图标（由 tools/make-assets.mjs 生成）
+├── manifest.json
+├── assets/icons/
 ├── src/
-│   ├── background/              Service Worker：编排、会话存储、下载队列、离屏文档管理
-│   ├── content/                 内容脚本：悬浮面板、页面扫描、地址处理、页内转换回退
-│   ├── offscreen/               离屏文档：图片解码、canvas 重绘、PNG 编码、blob 地址
-│   ├── results/                 结果页：响应式网格、选择交互、进度与错误反馈
-│   └── shared/                  共享常量、日志、消息封装、URL 工具
+│   ├── background/
+│   ├── content/
+│   ├── offscreen/
+│   ├── results/
+│   └── shared/
 ├── test/
-│   ├── test-page.html           本地测试页（不依赖真实电商网站）
-│   ├── test-page.js             测试页自身的懒加载与 Shadow DOM 脚本
-│   ├── test-frame.html          同源 iframe 测试页
-│   ├── images/                  测试图片（由 tools/make-assets.mjs 生成）
-│   ├── no-cors-server.mjs       「无 CORS 头」图片服务器，用于验证降级链路
-│   ├── unit-check.mjs           纯逻辑自检（248 条断言，不需要浏览器）
-│   └── fixture-server.md        本地夹具服务器的启动说明
+│   ├── test-page.html
+│   ├── test-page.js
+│   ├── test-frame.html
+│   ├── images/
+│   ├── no-cors-server.mjs
+│   ├── unit-check.mjs
+│   └── fixture-server.md
 ├── tools/
-│   ├── make-assets.mjs          生成图标与测试图片（可重复执行）
-│   ├── make-extension-zip.mjs   打包 docs/downloads/ImageGrab-v1.0.0.zip（只收运行所需文件）
-│   ├── check-syntax.mjs         静态检查：语法、import/export 一致性、清单、HTML 引用、消息类型覆盖
-│   └── check-contrast.mjs       官网配色对比度检查（读 site.css 的令牌，WCAG AA 三档：正文 4.5:1、大字号粗体 3:1、状态图形 3:1）
-└── docs/                        ← GitHub Pages 的站点根目录
-    ├── index.html               产品官网单页（插件介绍、界面展示、安装与使用步骤、常见问题、下载）
-    ├── .nojekyll                让 Pages 原样发布（不跑 Jekyll，保住下划线开头的文件）
-    ├── assets/                  站点样式、交互脚本与图标副本
-    ├── downloads/               ImageGrab-v1.0.0.zip，下载按钮用相对路径指向这里
-    ├── testing.md               完整测试步骤
-    └── troubleshooting.md       排障手册
+│   ├── make-assets.mjs
+│   ├── make-extension-zip.mjs
+│   ├── check-syntax.mjs
+│   └── check-contrast.mjs
+└── docs/
+    ├── index.html
+    ├── .nojekyll
+    ├── assets/
+    ├── downloads/
+    ├── testing.md
+    └── troubleshooting.md
 ```
 
 ## 产品官网
